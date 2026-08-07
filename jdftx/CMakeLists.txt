@@ -307,8 +307,12 @@ if(USE_SYCL)
     include_directories(BEFORE ${CMAKE_SOURCE_DIR}/gsycl)
 
     # SYCL compile/link flags for AOT PVC (Ahead-Of-Time for Intel PVC)
+    # NOTE: no -DMKL_CBLAS_H needed -- the gsycl/{cublas_v2,cusolverDn,cufft}.h
+    # shims are declarations-only headers (mirroring real CUDA headers) and
+    # never include any oneMKL C++ header, so mkl_cblas.h never appears
+    # alongside gsl/gsl_cblas.h in the same translation unit. The actual
+    # oneMKL calls live in gsycl/*_impl.cpp, compiled separately.
     set(SYCL_COMPILE_FLAGS
-        -DMKL_CBLAS_H
         -fsycl
         -fsycl-device-code-split=per_kernel
         -fp-model=precise
@@ -330,7 +334,14 @@ if(USE_SYCL)
     # Library with GPU kernels (compiled as C++ via gsycl shim)
     FILE(GLOB jdftxlibSources core/*.cpp fluid/*.cpp electronic/*.cpp perturb/*.cpp commands/*.cpp)
     FILE(GLOB gpukernelsSources core/*.cu fluid/*.cu electronic/*.cu commands/*.cu tests/*.cu)
-    add_library(jdftxlib_gpu_sycl  ${jdftxlibSources} ${gpukernelsSources})
+    # oneMKL-touching implementation TUs for the cublas_v2.h/cusolverDn.h/cufft.h
+    # shims (declarations-only headers) -- see gsycl/*_impl.cpp for rationale.
+    set(gsyclImplSources
+        ${CMAKE_SOURCE_DIR}/gsycl/cublas_impl.cpp
+        ${CMAKE_SOURCE_DIR}/gsycl/cusolver_impl.cpp
+        ${CMAKE_SOURCE_DIR}/gsycl/cufft_impl.cpp
+    )
+    add_library(jdftxlib_gpu_sycl  ${jdftxlibSources} ${gpukernelsSources} ${gsyclImplSources})
 
     # Compile .cu files as C++ (not CUDA) so gsycl headers shadow <cuda_runtime.h>
     set_source_files_properties(${gpukernelsSources} PROPERTIES LANGUAGE CXX)

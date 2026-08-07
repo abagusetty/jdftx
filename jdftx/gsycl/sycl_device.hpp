@@ -91,6 +91,22 @@ inline unsigned int __activemask() { return 0; }
 // Flattened 1D index for 2D grids
 #define kernelIndex1D() (int(__sycl_item.get_global_linear_id()))
 
+// CUDA thread/block/grid index and dimension macros
+// Mapped from __sycl_item (set by JDFTX_LAUNCH macro).
+// CUDA x/y/z -> SYCL dim 2/1/0 (row-major, fastest-varying = x = dim 2)
+#define threadIdx_x (int(__sycl_item.get_local_id(2)))
+#define threadIdx_y (int(__sycl_item.get_local_id(1)))
+#define threadIdx_z (int(__sycl_item.get_local_id(0)))
+#define blockDim_x (int(__sycl_item.get_local_range(2)))
+#define blockDim_y (int(__sycl_item.get_local_range(1)))
+#define blockDim_z (int(__sycl_item.get_local_range(0)))
+#define blockIdx_x (int(__sycl_item.get_group(2)))
+#define blockIdx_y (int(__sycl_item.get_group(1)))
+#define blockIdx_z (int(__sycl_item.get_group(0)))
+#define gridDim_x (int(__sycl_item.get_group_range(2)))
+#define gridDim_y (int(__sycl_item.get_group_range(1)))
+#define gridDim_z (int(__sycl_item.get_group_range(0)))
+
 #define __syncthreads() (sycl::group_barrier(__sycl_item.get_group()))
 
 // =========================================================================
@@ -125,6 +141,38 @@ inline sycl::nd_range<3> to_nd_range(const dim3& nBlocks, const dim3& nPerBlock)
                 __sycl_item = item;                                           \
                 kernel(__VA_ARGS__);                                          \
             });                                                               \
+    })
+
+// =========================================================================
+// 4b. JDFTX_LAUNCH_SHARED: kernel launch with sycl::local_accessor
+//     for dynamic shared memory (e.g. reduction kernels).
+//     Usage: JDFTX_LAUNCH_SHARED(kernel, glc, args)
+//     The kernel receives a sycl::local_accessor<double> as its LAST argument.
+//     The shared memory size is inferred from blockDim_x * 2 * sizeof(double)
+//     (enough for xMin + xMax per thread).
+// Actual implementation: uses sycl::local_accessor for workgroup shared memory.
+// The kernel must accept an extra argument: sycl::local_accessor<double, 1> __shared_mem__
+// The kernel internally uses __shared_mem__ as its shared memory array.
+#define JDFTX_LAUNCH_SHARED(kernel, glc, ...)                               \
+    jdftx_sycl::guarded([&]{                                                \
+        int nPerBlockX = (int)(glc).nPerBlock.x;                            \
+        std::size_t sharedBytes = 2 * nPerBlockX * sizeof(double);          \
+        sycl::queue& q = jdftx_sycl::queue();                               \
+        sycl::local_accessor<double, 1> __shared_mem__(sharedBytes);        \
+        q.parallel_for(                                                     \
+            jdftx_sycl::to_nd_range((glc).nBlocks, (glc).nPerBlock),        \
+            sycl::nd_range<3>(sycl::range<3>((glc).nBlocks.z*(glc).nPerBlock.z, \
+                                           (glc).nBlocks.y*(glc).nPerBlock.y, \
+                                           (glc).nBlocks.x*(glc).nPerBlock.x), \
+                              sycl::range<3>((glc).nPerBlock.z, (glc).nPerBlock.y, \
+                                               (glc).nPerBlock.x)),           \
+            [__shared_mem__](sycl::nd_item<3> item) {                       \
+                extern double* __jdftx_shared_ptr__;                       \
+                __jdftx_shared_ptr__ = static_cast<double*>(__shared_mem__.get_pointer()); \
+                           \
+                __sycl_item = item;                             \
+                kernel(__VA_ARGS__);                                        \
+            });                                                             \
     })
 
 // =========================================================================
@@ -213,7 +261,7 @@ struct cudaFuncAttributes {
 extern cudaDeviceProp cudaDevProps;
 
 inline cudaError_t cudaGetDeviceProperties(cudaDeviceProp* prop, int /*device*/ = 0) {
-    auto& dev = jdftx_sycl::queue().get_device();
+    const auto& dev = jdftx_sycl::queue().get_device();
     int wg = int(dev.get_info<sycl::info::device::max_work_group_size>());
     prop->maxThreadsPerBlock = wg;
     auto mi = dev.get_info<sycl::info::device::max_work_item_sizes<3>>();
@@ -244,21 +292,12 @@ inline cudaError_t cudaGetDeviceCount(int* n) { *n = 1; return cudaSuccess; }
 // =========================================================================
 // 8. Math functions (for __hostanddev__ code)
 // =========================================================================
-using sycl::sqrt;
-using sycl::exp;
-using sycl::log;
-using sycl::pow;
-using sycl::floor;
-using sycl::ceil;
-using sycl::erf;
-using sycl::erfc;
-using sycl::sin;
-using sycl::cos;
-using sycl::tanh;
-using sycl::atan;
-using sycl::fabs;
-using sycl::min;
-using sycl::max;
+// Note: Do NOT use 'using sycl::sqrt' etc. here — they conflict with
+// oneAPI compiler builtins (BUILTIN_GENF, BUILTIN_GENF_NATIVE_OPT, etc.)
+// that are already visible when compiling with -fsycl.
+// The SYCL math functions will be found via ADL or implicit conversion.
+// For host-side code, <cmath> provides std::sqrt/exp/log/etc.
+
 
 // =========================================================================
 // 9. CUDA-compatible types

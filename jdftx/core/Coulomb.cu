@@ -31,7 +31,7 @@ void coulombAnalytic_kernel(int zBlock, vector3<int> S, const matrix3<> GGT, con
 	void coulombAnalytic_gpu(vector3<int> S, const matrix3<>& GGT, const Coulomb##Type##_calc& calc, complex* data) \
 	{	GpuLaunchConfigHalf3D glc(coulombAnalytic_kernel<Coulomb##Type##_calc>, S); \
 		for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++) \
-			coulombAnalytic_kernel<Coulomb##Type##_calc><<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, GGT, calc, data); \
+			coulombAnalytic_kernelJDFTX_LAUNCH(Coulomb##Type##_calc, glc, (zBlock, S, GGT, calc, data)); \
 	}
 DECLARE_coulombAnalytic_gpu(Periodic)
 DECLARE_coulombAnalytic_gpu(Slab)
@@ -53,7 +53,7 @@ void coulombAnalyticStress_kernel(int zBlock, vector3<int> S, const matrix3<> GG
 	{	\
 		GpuLaunchConfigHalf3D glc(coulombAnalyticStress_kernel<Coulomb##Type##_calc>, S); \
 		for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++) \
-			coulombAnalyticStress_kernel<Coulomb##Type##_calc><<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, GGT, calc, X, Y, grad_RRT); \
+			coulombAnalyticStress_kernelJDFTX_LAUNCH(Coulomb##Type##_calc, glc, (zBlock, S, GGT, calc, X, Y, grad_RRT)); \
 	}
 DECLARE_coulombAnalyticStress_gpu(Periodic)
 DECLARE_coulombAnalyticStress_gpu(Slab)
@@ -74,7 +74,7 @@ void coulombNumericalStress_gpu(vector3<int> S, const matrix3<>& GGT, const symm
 {
 	GpuLaunchConfigHalf3D glc(coulombNumericalStress_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		coulombNumericalStress_kernel<<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, GGT, Vc_RRT, X, Y, grad_RRT);
+		JDFTX_LAUNCH(coulombNumericalStress_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, Vc_RRT, X, Y, grad_RRT);
 }
 
 
@@ -100,8 +100,8 @@ template<> void exchangeAnalytic_kernel<ExchangeSlab_calc>(int zBlock,
 	{	\
 		GpuLaunchConfig3D glc(exchangeAnalytic_kernel<Exchange##Type##_calc>, S); \
 		for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++) \
-			exchangeAnalytic_kernel<Exchange##Type##_calc><<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, GGT, calc, \
-				data, kDiff, Vzero, thresholdSq); \
+			exchangeAnalytic_kernelJDFTX_LAUNCH(Exchange##Type##_calc, glc, (zBlock, S, GGT, calc, \
+				data, kDiff, Vzero, thresholdSq)); \
 	}
 DECLARE_exchangeAnalytic_gpu(Periodic)
 DECLARE_exchangeAnalytic_gpu(PeriodicScreened)
@@ -136,8 +136,8 @@ void exchangeAnalyticStress_kernel<ExchangeSlab_calc>(int zBlock, vector3<int> S
 	{	\
 		GpuLaunchConfig3D glc(exchangeAnalyticStress_kernel<Exchange##Type##_calc>, S); \
 		for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++) \
-			exchangeAnalyticStress_kernel<Exchange##Type##_calc><<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, G, calc, \
-				X, grad_RRT, kDiff, thresholdSq); \
+			exchangeAnalyticStress_kernelJDFTX_LAUNCH(Exchange##Type##_calc, glc, (zBlock, S, G, calc, \
+				X, grad_RRT, kDiff, thresholdSq)); \
 	}
 DECLARE_exchangeAnalyticStress_gpu(Periodic)
 DECLARE_exchangeAnalyticStress_gpu(PeriodicScreened)
@@ -155,7 +155,7 @@ void multRealKernel_kernel(int zBlock, vector3<int> S, const double* kernel, com
 void multRealKernel_gpu(vector3<int> S, const double* kernel, complex* data)
 {	GpuLaunchConfig3D glc(multRealKernel_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		multRealKernel_kernel<<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, kernel, data);
+		JDFTX_LAUNCH(multRealKernel_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, kernel, data);
 }
 
 __global__
@@ -166,7 +166,7 @@ void multTransformedKernel_kernel(int zBlock, vector3<int> S, const double* kern
 void multTransformedKernel_gpu(vector3<int> S, const double* kernel, complex* data, const vector3<int>& offset)
 {	GpuLaunchConfig3D glc(multTransformedKernel_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		multTransformedKernel_kernel<<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, kernel, data, offset);
+		JDFTX_LAUNCH(multTransformedKernel_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, kernel, data, offset);
 }
 
 
@@ -178,7 +178,7 @@ void realKernelStress_kernel(int zBlock, vector3<int> S, const symmetricMatrix3<
 void realKernelStress_gpu(vector3<int> S, const symmetricMatrix3<>* kernel_RRT, const complex* X, symmetricMatrix3<>* grad_RRT)
 {	GpuLaunchConfig3D glc(realKernelStress_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		realKernelStress_kernel<<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, kernel_RRT, X, grad_RRT);
+		JDFTX_LAUNCH(realKernelStress_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, kernel_RRT, X, grad_RRT);
 }
 
 
@@ -190,5 +190,5 @@ void transformedKernelStress_kernel(int zBlock, vector3<int> S, const symmetricM
 void transformedKernelStress_gpu(vector3<int> S, const symmetricMatrix3<>* kernel_RRT, const complex* X, symmetricMatrix3<>* grad_RRT, const vector3<int>& offset)
 {	GpuLaunchConfig3D glc(transformedKernelStress_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		transformedKernelStress_kernel<<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, kernel_RRT, X, grad_RRT, offset);
+		JDFTX_LAUNCH(transformedKernelStress_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, kernel_RRT, X, grad_RRT, offset);
 }

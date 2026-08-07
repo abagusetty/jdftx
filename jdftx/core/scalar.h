@@ -34,7 +34,7 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 #else //in .cu files
 	#define __hostanddev__ inline __device__ __host__
 	#define __in_a_cu_file__
-	#include <cuda_runtime.h>
+	#include "gsycl/cuda_runtime.h"
 #endif
 
 //! Struct to wrap a fixed size array for passing to templated functions

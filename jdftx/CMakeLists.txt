@@ -273,6 +273,85 @@ if(EnableCUDA)
 		add_definitions("-DCUSOLVER_ENABLED")
 	endif()
 endif()
+#--------------- Intel GPU support using SYCL (AOT PVC build) ------------------------
+option(USE_SYCL "Enable Intel PVC (SYCL) GPU support" OFF)
+if(USE_SYCL)
+    message(STATUS "Building with SYCL support (USE_SYCL=ON)")
+
+    # Honor user-supplied CMAKE_BUILD_TYPE; default to Release.
+    # For AOT (-fsycl-targets=spir64_gen) a full -g injects into the device path
+    # and reaches ocloc which disables optimization. We downgrade C++ -g to
+    # -gline-tables-only so host frames get file:line for gdb-oneapi while the
+    # device build stays optimized.
+    if(NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
+        set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    endif()
+    message(STATUS "SYCL build: CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
+
+    # # Downgrade -g to -gline-tables-only for C++ per-config flags.
+    # # This prevents ocloc from receiving -options "-g" and keeps device code optimized.
+    # foreach(_cfg RELWITHDEBINFO DEBUG)
+    #     if(CMAKE_CXX_FLAGS_${_cfg})
+    #         string(REPLACE "-g" "-gline-tables-only"
+    #                CMAKE_CXX_FLAGS_${_cfg} "${CMAKE_CXX_FLAGS_${_cfg}}")
+    #     endif()
+    # endforeach()
+
+    # # gsycl INTERFACE target - carries the shim include path (matches gpu4pyscf pattern)
+    # add_library(sycl_compat INTERFACE)
+    # target_include_directories(sycl_compat INTERFACE
+    #     "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/gsycl>"
+    # )
+
+    # Add gsycl/ shim to include path (BEFORE system paths to shadow CUDA headers)
+    include_directories(BEFORE ${CMAKE_SOURCE_DIR}/gsycl)
+
+    # SYCL compile/link flags for AOT PVC (Ahead-Of-Time for Intel PVC)
+    set(SYCL_COMPILE_FLAGS
+        -DMKL_CBLAS_H
+        -fsycl
+        -fsycl-device-code-split=per_kernel
+        -fp-model=precise
+        -fno-system-debug
+        -fsycl-default-sub-group-size=32
+        -fsycl-targets=spir64_gen
+        "SHELL:-Xsycl-target-backend=spir64_gen \"-device pvc\""
+    )
+
+    set(SYCL_LINK_FLAGS
+        -fsycl
+        # -flink-huge-device-code
+        # -fsycl-max-parallel-link-jobs=4
+        -ftarget-register-alloc-mode=pvc:auto
+        -fsycl-targets=spir64_gen
+        "SHELL:-Xsycl-target-backend=spir64_gen \"-device pvc\""
+    )
+
+    # Library with GPU kernels (compiled as C++ via gsycl shim)
+    FILE(GLOB jdftxlibSources core/*.cpp fluid/*.cpp electronic/*.cpp perturb/*.cpp commands/*.cpp)
+    FILE(GLOB gpukernelsSources core/*.cu fluid/*.cu electronic/*.cu commands/*.cu tests/*.cu)
+    add_library(jdftxlib_gpu_sycl  ${jdftxlibSources} ${gpukernelsSources})
+
+    # Compile .cu files as C++ (not CUDA) so gsycl headers shadow <cuda_runtime.h>
+    set_source_files_properties(${gpukernelsSources} PROPERTIES LANGUAGE CXX)
+    set_source_files_properties(${gpukernelsSources} PROPERTIES COMPILE_FLAGS "-x c++")
+    target_compile_options(jdftxlib_gpu_sycl PRIVATE ${SYCL_COMPILE_FLAGS})
+    target_link_options(jdftxlib_gpu_sycl PRIVATE ${SYCL_LINK_FLAGS})
+
+    # oneMKL discovery and linking (CONFIG mode, NOT -qmkl flag).
+    # Link specific oneMKL SYCL domains instead of full MKL::MKL_SYCL
+    find_package(MKL REQUIRED CONFIG PATHS "$ENV{MKLROOT}")
+    target_link_libraries(jdftxlib_gpu_sycl
+        MKL::MKL_SYCL::BLAS
+        MKL::MKL_SYCL::LAPACK
+        MKL::MKL_SYCL::DFT
+    )
+
+    target_link_libraries(jdftxlib_gpu_sycl ${EXTERNAL_LIBS})
+
+    set_target_properties(jdftxlib_gpu_sycl PROPERTIES OUTPUT_NAME "jdftx_gpu_sycl")
+    set_JDFTx_flags(jdftxlib_gpu_sycl ON)
+endif()
 
 option(PinnedHostMemory "Use page-locked host memory to speed up GPU transfers" OFF)
 if(PinnedHostMemory)

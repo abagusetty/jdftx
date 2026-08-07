@@ -22,10 +22,10 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 #define JDFTX_CORE_GPUKERNELUTILS_H
 
 #include <algorithm>
-#include <cuda_runtime.h>
-#include <cublas_v2.h>
-#include <driver_types.h>
-#include <vector_types.h>
+#include "gsycl/cuda_runtime.h"
+#include "gsycl/cublas_v2.h"
+#include "gsycl/driver_types.h"
+#include "gsycl/vector_types.h"
 #include <core/vector3.h>
 
 //! @addtogroup Utilities
@@ -37,7 +37,7 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 extern cudaDeviceProp cudaDevProps; //!< cached properties of currently running device (defined in GpuUtil.cpp)
 extern cublasHandle_t cublasHandle; //!< global handle to cublas (defined in GpuUtil.cpp)
 #ifdef CUSOLVER_ENABLED
-#include <cusolverDn.h>
+#include "gsycl/cusolverDn.h"
 extern cusolverDnHandle_t cusolverHandle;  //!< global handle to cusolverDn (defined in GpuUtil.cpp)
 #endif
 

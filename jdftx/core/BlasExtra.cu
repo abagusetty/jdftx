@@ -20,7 +20,7 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 #include <core/GpuKernelUtils.h>
 #include <core/BlasExtra_internal.h>
 #include <algorithm>
-#include <cublas_v2.h>
+#include "gsycl/cublas_v2.h"
 #include <cfloat>
 #include <gsl/gsl_cblas.h>
 
@@ -31,17 +31,17 @@ void eblas_mul_kernel(const int N, const Tx* X, const int incX, Ty* Y, const int
 }
 void eblas_dmul_gpu(const int N, const double* X, const int incX, double* Y, const int incY)
 {	GpuLaunchConfig1D glc(eblas_mul_kernel<double,double>, N);
-	eblas_mul_kernel<double,double><<<glc.nBlocks,glc.nPerBlock>>>(N, X,incX, Y,incY);
+	eblas_mul_kernelJDFTX_LAUNCH(double,double, glc, (N, X,incX, Y,incY));
 	gpuErrorCheck();
 }
 void eblas_zmul_gpu(const int N, const complex* X, const int incX, complex* Y, const int incY)
 {	GpuLaunchConfig1D glc(eblas_mul_kernel<complex,complex>, N);
-	eblas_mul_kernel<complex,complex><<<glc.nBlocks,glc.nPerBlock>>>(N, X,incX, Y,incY);
+	eblas_mul_kernelJDFTX_LAUNCH(complex,complex, glc, (N, X,incX, Y,incY));
 	gpuErrorCheck();
 }
 void eblas_zmuld_gpu(const int N, const double* X, const int incX, complex* Y, const int incY)
 {	GpuLaunchConfig1D glc(eblas_mul_kernel<double,complex>, N);
-	eblas_mul_kernel<double,complex><<<glc.nBlocks,glc.nPerBlock>>>(N, X,incX, Y,incY);
+	eblas_mul_kernelJDFTX_LAUNCH(double,complex, glc, (N, X,incX, Y,incY));
 	gpuErrorCheck();
 }
 
@@ -59,7 +59,7 @@ void eblas_lincomb_gpu(const int N,
 	const complex& sY, const complex* Y, const int incY,
 	complex* Z, const int incZ)
 {	GpuLaunchConfig1D glc(eblas_lincomb_kernel, N);
-	eblas_lincomb_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, sX,X,incX, sY,Y,incY, Z,incZ);
+	JDFTX_LAUNCH(eblas_lincomb_kernel, glc.nBlocks,glc.nPerBlock, N, sX,X,incX, sY,Y,incY, Z,incZ);
 	gpuErrorCheck();
 }
 
@@ -93,7 +93,7 @@ void eblas_gather_axpy_kernel(const int N, scalar2 a, const int* index, const sc
 	template<typename scalar, typename scalar2, typename Conjugator> \
 	void eblas_##type##_axpy_gpu(const int N, scalar2 a, const int* index, const scalar* x, scalar* y, const scalar* w, const Conjugator& conjugator) \
 	{	GpuLaunchConfig1D glc(eblas_##type##_axpy_kernel<scalar,scalar2,Conjugator>, N); \
-		eblas_##type##_axpy_kernel<scalar,scalar,Conjugator><<<glc.nBlocks,glc.nPerBlock>>>(N, a, index, x, y, w, conjugator); \
+		eblas_##type##_axpy_kernelJDFTX_LAUNCH(scalar,scalar,Conjugator, glc, (N, a, index, x, y, w, conjugator)); \
 		gpuErrorCheck(); \
 	}
 DEFINE_SPARSE_AXPY_GPU_LAUNCHER(scatter)
@@ -109,7 +109,7 @@ void eblas_accumNorm_kernel(int N, double a, const complex* x, double* y)
 }
 void eblas_accumNorm_gpu(int N, const double& a, const complex* x, double* y)
 {	GpuLaunchConfig1D glc(eblas_accumNorm_kernel, N);
-	eblas_accumNorm_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, a, x, y);
+	JDFTX_LAUNCH(eblas_accumNorm_kernel, glc.nBlocks,glc.nPerBlock, N, a, x, y);
 	gpuErrorCheck();
 }
 
@@ -124,7 +124,7 @@ void eblas_accumProd_kernel(int N, double a, const complex* xU, const complex* x
 }
 void eblas_accumProd_gpu(int N, const double& a, const complex* xU, const complex* xC, double* yRe, double* yIm)
 {	GpuLaunchConfig1D glc(eblas_accumProd_kernel, N);
-	eblas_accumProd_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, a, xU, xC, yRe, yIm);
+	JDFTX_LAUNCH(eblas_accumProd_kernel, glc.nBlocks,glc.nPerBlock, N, a, xU, xC, yRe, yIm);
 	gpuErrorCheck();
 }
 
@@ -137,7 +137,7 @@ void eblas_accumProdComplex_kernel(int N, double a, const complex* xU, const com
 }
 void eblas_accumProdComplex_gpu(int N, const double& a, const complex* xU, const complex* xC, complex* y)
 {	GpuLaunchConfig1D glc(eblas_accumProdComplex_kernel, N);
-	eblas_accumProdComplex_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, a, xU, xC, y);
+	JDFTX_LAUNCH(eblas_accumProdComplex_kernel, glc.nBlocks,glc.nPerBlock, N, a, xU, xC, y);
 	gpuErrorCheck();
 }
 
@@ -148,7 +148,7 @@ void eblas_symmetrize_kernel(int N, int n, const int* symmIndex, scalar* x, doub
 }
 template<typename scalar> void eblas_symmetrize_gpu(int N, int n, const int* symmIndex, scalar* x)
 {	GpuLaunchConfig1D glc(eblas_symmetrize_kernel<scalar>, N);
-	eblas_symmetrize_kernel<scalar><<<glc.nBlocks,glc.nPerBlock>>>(N, n, symmIndex, x, 1./n);
+	eblas_symmetrize_kernelJDFTX_LAUNCH(scalar, glc, (N, n, symmIndex, x, 1./n));
 	gpuErrorCheck();
 }
 void eblas_symmetrize_gpu(int N, int n, const int* symmIndex, double* x) { eblas_symmetrize_gpu<double>(N, n, symmIndex, x); }
@@ -161,7 +161,7 @@ void eblas_symmetrize_phase_kernel(int N, int n, const int* symmIndex, const int
 }
 void eblas_symmetrize_gpu(int N, int n, const int* symmIndex, const int* symmMult, const complex* phase, complex* x)
 {	GpuLaunchConfig1D glc(eblas_symmetrize_phase_kernel, N);
-	eblas_symmetrize_phase_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, n, symmIndex, symmMult, phase, x);
+	JDFTX_LAUNCH(eblas_symmetrize_phase_kernel, glc.nBlocks,glc.nPerBlock, N, n, symmIndex, symmMult, phase, x);
 	gpuErrorCheck();
 }
 
@@ -172,7 +172,7 @@ void eblas_symmetrize_phase_rot_kernel(int N, int n, const int* symmIndex, const
 }
 void eblas_symmetrize_gpu(int N, int n, const int* symmIndex, const int* symmMult, const complex* phase, const matrix3<>* rotSpin, std::vector<complex*> x)
 {	GpuLaunchConfig1D glc(eblas_symmetrize_phase_rot_kernel, N);
-	eblas_symmetrize_phase_rot_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, n, symmIndex, symmMult, phase, rotSpin, complexPtr4(x));
+	JDFTX_LAUNCH(eblas_symmetrize_phase_rot_kernel, glc.nBlocks,glc.nPerBlock, N, n, symmIndex, symmMult, phase, rotSpin, complexPtr4(x);
 	gpuErrorCheck();
 }
 
@@ -219,7 +219,8 @@ double eblas_dnrm2_gpu(int N, const double* x, int incx)
 //forward declare the cpu version (used at the end for colletcing results):
 void eblas_capMinMax(const int N, double* x, double& xMin, double& xMax, double capLo=-DBL_MAX, double capHi=+DBL_MAX);
 
-extern __shared__ double xMinLoc[];
+extern double* __jdftx_shared_ptr__;
+#define xMinLoc __jdftx_shared_ptr__
 __global__
 void eblas_capMinMax_kernel(int N, double* x, double* xMinBlk, double* xMaxBlk, double capLo, double capHi)
 {	int i=kernelIndex1D();
@@ -264,7 +265,7 @@ void eblas_capMinMax_gpu(const int N, double* x, double& xMin, double& xMax, dou
 	GpuBuffer xMinBlk(nBlocksTot*2);
 	double* xMaxBlk = (double*)xMinBlk + nBlocksTot;
 	int sharedMemBytes = 2*glc.nPerBlock.x*sizeof(double);
-	eblas_capMinMax_kernel<<<glc.nBlocks,glc.nPerBlock,sharedMemBytes>>>(N,x,xMinBlk,xMaxBlk,capLo,capHi);
+	JDFTX_LAUNCH_SHARED(eblas_capMinMax_kernel, glc, (N,x,xMinBlk,xMaxBlk,capLo,capHi));
 	//Finish on the CPU:
 	double* xMinCpu = new double[2*nBlocksTot];
 	double* xMaxCpu = xMinCpu + nBlocksTot;

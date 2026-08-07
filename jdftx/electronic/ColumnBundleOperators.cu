@@ -30,7 +30,7 @@ void reducedL_kernel(int nbasis, int ncols, const complex* Y, complex* LY,
 void reducedL_gpu(int nbasis, int ncols, const complex* Y, complex* LY,
 	const matrix3<> GGT, const vector3<int>* iGarr, const vector3<> k, double detR)
 {	GpuLaunchConfig1D glc(reducedL_kernel, nbasis);
-	reducedL_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, LY, GGT, iGarr, k, detR);
+	JDFTX_LAUNCH(reducedL_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, LY, GGT, iGarr, k, detR);
 	gpuErrorCheck();
 }
 
@@ -43,7 +43,7 @@ void reducedLinv_kernel(int nbasis, int ncols, const complex* Y, complex* LinvY,
 void reducedLinv_gpu(int nbasis, int ncols, const complex* Y, complex* LinvY,
 	const matrix3<> GGT, const vector3<int>* iGarr, const vector3<> k, double detR)
 {	GpuLaunchConfig1D glc(reducedLinv_kernel, nbasis);
-	reducedLinv_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, LinvY, GGT, iGarr, k, detR);
+	JDFTX_LAUNCH(reducedLinv_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, LinvY, GGT, iGarr, k, detR);
 	gpuErrorCheck();
 }
 
@@ -56,7 +56,7 @@ void reducedLstress_kernel(int nbasis, int ncols, const complex* Y, const double
 void reducedLstress_gpu(int nbasis, int ncols, const complex* Y, const double* F,
 	const vector3<int>* iGarr, const vector3<>& k, symmetricMatrix3<>* result)
 {	GpuLaunchConfig1D glc(reducedLstress_kernel, nbasis);
-	reducedLstress_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, F, iGarr, k, result);
+	JDFTX_LAUNCH(reducedLstress_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, F, iGarr, k, result);
 	gpuErrorCheck();
 }
 
@@ -70,7 +70,7 @@ void precond_inv_kinetic_kernel(int nbasis, int ncols, complex* Y,
 void precond_inv_kinetic_gpu(int nbasis, int ncols, complex* Y,
 	double KErollover, const matrix3<> GGT, const vector3<int>* iGarr, const vector3<> k, double invdetR, bool sqrtop)
 {	GpuLaunchConfig1D glc(precond_inv_kinetic_kernel, nbasis);
-	precond_inv_kinetic_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, KErollover, GGT, iGarr, k, invdetR, sqrtop);
+	JDFTX_LAUNCH(precond_inv_kinetic_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, KErollover, GGT, iGarr, k, invdetR, sqrtop);
 	gpuErrorCheck();
 }
 
@@ -83,7 +83,7 @@ void precond_inv_kinetic_band_kernel(int nbasis, int ncols, complex* Y, const do
 void precond_inv_kinetic_band_gpu(int nbasis, int ncols, complex* Y, const double* KEref,
 	const matrix3<>& GGT, const vector3<int>* iGarr, const vector3<>& k)
 {	GpuLaunchConfig1D glc(precond_inv_kinetic_band_kernel, nbasis);
-	precond_inv_kinetic_band_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, KEref, GGT, iGarr, k);
+	JDFTX_LAUNCH(precond_inv_kinetic_band_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, KEref, GGT, iGarr, k);
 	gpuErrorCheck();
 }
 
@@ -94,7 +94,7 @@ void translate_kernel(int nbasis, int ncols, complex* Y, const vector3<int>* iGa
 }
 void translate_gpu(int nbasis, int ncols, complex* Y, const vector3<int>* iGarr, const vector3<>& k, const vector3<>& dr)
 {	GpuLaunchConfig1D glc(translate_kernel, nbasis);
-	translate_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, iGarr, k, dr);
+	JDFTX_LAUNCH(translate_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, iGarr, k, dr);
 	gpuErrorCheck();
 }
 
@@ -105,7 +105,7 @@ void translateColumns_kernel(int nbasis, int ncols, complex* Y, const vector3<in
 }
 void translateColumns_gpu(int nbasis, int ncols, complex* Y, const vector3<int>* iGarr, const vector3<>& k, const vector3<>* dr)
 {	GpuLaunchConfig1D glc(translateColumns_kernel, nbasis);
-	translateColumns_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, iGarr, k, dr);
+	JDFTX_LAUNCH(translateColumns_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, iGarr, k, dr);
 	gpuErrorCheck();
 }
 
@@ -119,7 +119,7 @@ void reducedD_kernel(int nbasis, int ncols, const complex* Y, complex* DY,
 void reducedD_gpu(int nbasis, int ncols, const complex* Y, complex* DY, 
 	const vector3<int>* iGarr, double kdotGe, const vector3<> Ge)
 {	GpuLaunchConfig1D glc(reducedD_kernel, nbasis);
-	reducedD_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, DY, iGarr, kdotGe, Ge);
+	JDFTX_LAUNCH(reducedD_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, DY, iGarr, kdotGe, Ge);
 	gpuErrorCheck();
 }
 
@@ -132,6 +132,6 @@ void reducedDD_kernel(int nbasis, int ncols, const complex* Y, complex* DDY,
 void reducedDD_gpu(int nbasis, int ncols, const complex* Y, complex* DDY, 
 	const vector3<int>* iGarr, double kdotGe1, double kdotGe2, const vector3<> Ge1, const vector3<> Ge2)
 {	GpuLaunchConfig1D glc(reducedDD_kernel, nbasis);
-	reducedDD_kernel<<<glc.nBlocks,glc.nPerBlock>>>(nbasis, ncols, Y, DDY, iGarr, kdotGe1, kdotGe2, Ge1, Ge2);
+	JDFTX_LAUNCH(reducedDD_kernel, glc.nBlocks,glc.nPerBlock, nbasis, ncols, Y, DDY, iGarr, kdotGe1, kdotGe2, Ge1, Ge2);
 	gpuErrorCheck();
 }

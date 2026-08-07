@@ -29,7 +29,7 @@ namespace ShapeFunction
 	}
 	void compute_gpu(int N, const double* n, double* shape, const double nc, const double sigma)
 	{	GpuLaunchConfig1D glc(compute_kernel, N);
-		compute_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, n, shape, nc, sigma);
+		JDFTX_LAUNCH(compute_kernel, glc.nBlocks,glc.nPerBlock, N, n, shape, nc, sigma);
 		gpuErrorCheck();
 	}
 
@@ -39,7 +39,7 @@ namespace ShapeFunction
 	}
 	void propagateGradient_gpu(int N, const double* n, const double* grad_shape, double* grad_n, const double nc, const double sigma)
 	{	GpuLaunchConfig1D glc(propagateGradient_kernel, N);
-		propagateGradient_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, n, grad_shape, grad_n, nc, sigma);
+		JDFTX_LAUNCH(propagateGradient_kernel, glc.nBlocks,glc.nPerBlock, N, n, grad_shape, grad_n, nc, sigma);
 		gpuErrorCheck();
 	}
 }
@@ -59,7 +59,7 @@ namespace ShapeFunctionCANDLE
 		const double* A_shape, double* A_n, vector3<double*> A_Dn, vector3<double*> A_Dphi, double* A_pCavity,
 		const double nc, const double invSigmaSqrt2, const double pCavity)
 	{	GpuLaunchConfig1D glc(compute_or_grad_kernel, N);
-		compute_or_grad_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, grad, n, Dn, Dphi, shape, A_shape, A_n, A_Dn, A_Dphi, A_pCavity, nc, invSigmaSqrt2, pCavity);
+		JDFTX_LAUNCH(compute_or_grad_kernel, glc.nBlocks,glc.nPerBlock, N, grad, n, Dn, Dphi, shape, A_shape, A_n, A_Dn, A_Dphi, A_pCavity, nc, invSigmaSqrt2, pCavity);
 		gpuErrorCheck();
 	}
 }
@@ -72,7 +72,7 @@ namespace ShapeFunctionSGA13
 	}
 	void expandDensityHelper_gpu(int N, double alpha, const double* nBar, const double* DnBarSq, double* nEx, double* nEx_nBar, double* nEx_DnBarSq)
 	{	GpuLaunchConfig1D glc(expandDensityHelper_kernel, N);
-		expandDensityHelper_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, alpha, nBar, DnBarSq, nEx, nEx_nBar, nEx_DnBarSq);
+		JDFTX_LAUNCH(expandDensityHelper_kernel, glc.nBlocks,glc.nPerBlock, N, alpha, nBar, DnBarSq, nEx, nEx_nBar, nEx_DnBarSq);
 		gpuErrorCheck();
 	}
 }
@@ -90,7 +90,7 @@ namespace ShapeFunctionSoftSphere
 	{	GpuLaunchConfig3D glc(compute_kernel, S);
 		vector3<> Sinv(1./S[0], 1./S[1], 1./S[2]);
 		for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-			compute_kernel<<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, Sinv, RTR, nAtoms, x, nReps, reps, radius, shape, sigmaInv);
+			JDFTX_LAUNCH(compute_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, Sinv, RTR, nAtoms, x, nReps, reps, radius, shape, sigmaInv);
 		gpuErrorCheck();
 	}
 	
@@ -107,7 +107,7 @@ namespace ShapeFunctionSoftSphere
 	{	GpuLaunchConfig3D glc(propagateGradient_kernel, S);
 		vector3<> Sinv(1./S[0], 1./S[1], 1./S[2]);
 		for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-			propagateGradient_kernel<<<glc.nBlocks,glc.nPerBlock>>>(zBlock, S, Sinv, RTR, x, nReps, reps, radius, shape, E_shape, E_x, E_radius, sigmaInv);
+			JDFTX_LAUNCH(propagateGradient_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, Sinv, RTR, x, nReps, reps, radius, shape, E_shape, E_x, E_radius, sigmaInv);
 		gpuErrorCheck();
 	}
 }
@@ -120,7 +120,7 @@ namespace ShapeFunctionSCCS
 	}
 	void compute_gpu(int N, const double* n, double* shape, const double rhoMin, const double rhoMax, const double epsBulk)
 	{	GpuLaunchConfig1D glc(compute_kernel, N);
-		compute_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, n, shape, rhoMin, rhoMax, epsBulk);
+		JDFTX_LAUNCH(compute_kernel, glc.nBlocks,glc.nPerBlock, N, n, shape, rhoMin, rhoMax, epsBulk);
 		gpuErrorCheck();
 	}
 
@@ -130,7 +130,7 @@ namespace ShapeFunctionSCCS
 	}
 	void propagateGradient_gpu(int N, const double* n, const double* grad_shape, double* grad_n, const double rhoMin, const double rhoMax, const double epsBulk)
 	{	GpuLaunchConfig1D glc(propagateGradient_kernel, N);
-		propagateGradient_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, n, grad_shape, grad_n, rhoMin, rhoMax, epsBulk);
+		JDFTX_LAUNCH(propagateGradient_kernel, glc.nBlocks,glc.nPerBlock, N, n, grad_shape, grad_n, rhoMin, rhoMax, epsBulk);
 		gpuErrorCheck();
 	}
 }
@@ -146,7 +146,7 @@ namespace NonlinearPCMeval
 	void Screening::apply_gpu(size_t N, const RadialFunctionG& ionEnergyLookup,
 			const double* s, const double* phi, double* A, double* A_phi, double* A_s) const
 	{	GpuLaunchConfig1D glc(ScreeningApply_kernel, N);
-		ScreeningApply_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, ionEnergyLookup, s, phi, A, A_phi, A_s, *this);
+		JDFTX_LAUNCH(ScreeningApply_kernel, glc.nBlocks,glc.nPerBlock, N, ionEnergyLookup, s, phi, A, A_phi, A_s, *this);
 		gpuErrorCheck();
 	}
 
@@ -159,7 +159,7 @@ namespace NonlinearPCMeval
 	void Dielectric::apply_gpu(size_t N, const RadialFunctionG& dielEnergyLookup,
 			const double* s, vector3<const double*> Dphi, double* A, vector3<double*> A_Dphi, double* A_s) const
 	{	GpuLaunchConfig1D glc(DielectricApply_kernel, N);
-		DielectricApply_kernel<<<glc.nBlocks,glc.nPerBlock>>>(N, dielEnergyLookup, s, Dphi, A, A_Dphi, A_s, *this);
+		JDFTX_LAUNCH(DielectricApply_kernel, glc.nBlocks,glc.nPerBlock, N, dielEnergyLookup, s, Dphi, A, A_Dphi, A_s, *this);
 		gpuErrorCheck();
 	}
 }

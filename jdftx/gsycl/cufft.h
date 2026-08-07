@@ -1,153 +1,131 @@
 #pragma once
-// cuFFT → oneMKL DFT shim
-// Maps cufft API to Intel MKL DFTI calls.
-// KEY: JDFTx uses OUT-OF-PLACE UNPACKED layout, which is the default for
-// oneMKL when DFTI_CONJUGATE_EVEN_STORAGE=DFTI_NOT_APPLICABLE.
-// Set strides explicitly to match CUDA's CCE (Conjugate Complex Even) layout.
+// cuFFT -> oneMKL DFT shim (USM SYCL API)
+// Maps cufft API to oneapi::mkl::dft::* USM calls.
 
-#include <mkl_dfti.h>
 #include <sycl/sycl.hpp>
-#include "sycl_device.hpp"
+#include <oneapi/mkl/dft.hpp>
+#include sycl_device.hpp  // defines double2, cudaSuccess, cuDoubleConcept
 
 // =====================================================================
-// Type aliases and stubs
+// Type aliases and stubs (NO cudaSuccess here - defined in sycl_device.hpp)
 // =====================================================================
 typedef int cudaError_t;
-inline constexpr int cudaSuccess = 0;
+inline constexpr int CUFFT_FORWARD = -1;
+inline constexpr int CUFFT_INVERSE = +1;
+inline constexpr int CUFFT_Z2Z = 0;
+inline constexpr int CUFFT_D2Z = 1;
+inline constexpr int CUFFT_Z2D = 2;
+
+// JDFTx casts complex<double>* as double2* — same layout
+typedef double2 cuDoubleComplex;
 
 // =====================================================================
-// cuFFT → oneMKL mapping
-//
-// JDFTx uses these types:
-//   cufftHandle planZ2Z, planD2Z, planZ2D  (in GridInfo)
-//   cufftPlan3d(&plan, S[0],S[1],S[2], CUFFT_*)  (in GridInfo.cpp)
-//   cufftExecZ2D/Z2Z/D2Z(...)                  (in Operators.cpp)
-//   cufftDestroy(...)                          (in GridInfo.cpp)
-//
-// Handle: wrap oneMKL descriptor
-typedef struct {
-    DFTI_DESCRIPTOR_HANDLE desc;
+// Handle: wraps oneMKL DFT descriptor
+// =====================================================================
+typedef oneapi::mkl::dft::descriptor<oneapi::mkl::dft::precision::DOUBLE,
+                                      oneapi::mkl::dft::domain::COMPLEX> dft_descriptor_c16;
+
+struct cufftHandle {
+    dft_descriptor_c16* desc;
+    int type;    // CUFFT_Z2Z, CUFFT_D2Z, CUFFT_Z2D
     bool initialized;
-} cufftHandle;
+};
 
 // =====================================================================
-// cufftPlan3d → DftiMakeDescriptor
-//
-// JDFTx uses:
-//   cufftPlan3d(&plan, S[0],S[1],S[2], CUFFT_Z2Z)
-//   cufftPlan3d(&plan, S[0],S[1],S[2], CUFFT_D2Z)  (R→G)
-//   cufftPlan3d(&plan, S[0],S[1],S[2], CUFFT_Z2D)  (G→R)
-//
-// oneMKL equivalent:
-//   DftiMakeDescriptor(handle, MKL_Z2Z or MKL_D2Z or MKL_Z2D,
-//                      MKL_COMPLEX or double, 3, dims)
-//   DftiSetValue(handle, DFTI_COMPLEX_OUTPUT, ...)  // controls packed/unpacked
-//   DftiCommitDescriptor(handle)
-//
-// CRITICAL: oneMKL defaults to IN-PLACE PADDED for real transforms.
-// JDFTx always does OUT-OF-PLACE. Set DFTI_CONJUGATE_EVEN_STORAGE
-// to DFTI_NOT_APPLICABLE for complex transforms (Z2Z) — no packing needed.
-// For real transforms (D2Z, Z2D), set DFTI_PACKED_FORMAT = DFTI_NOT_APPLICABLE
-// to get unpacked output.
+// Helper: create descriptor for 3D plan
 // =====================================================================
+static dft_descriptor_c16* create_plan(int type, int nx, int ny, int nz) {
+    std::vector<std::int64_t> n = { (std::int64_t)nz, (std::int64_t)ny, (std::int64_t)nx };
 
-inline cudaError_t cufftPlan3d(cufftHandle* plan, int nx, int ny, int nz, int type) {
-    plan->desc = 0;
-    plan->initialized = false;
-
-    // Create descriptor
-    int rank = 3;
-    size_t n[3] = { (size_t)nz, (size_t)ny, (size_t)nx };  // oneMKL: slowest→fastest
-
-    switch(type) {
-        case CUFFT_Z2Z:
-            // Complex → Complex, unpacked (default)
-            DftiMakeDescriptor(&plan->desc, MKL_Z2Z, MKL_DOUBLE, rank, n);
-            DftiSetValue(plan->desc, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_NOT_APPLICABLE);
-            DftiSetValue(plan->desc, DFTI_INPUT_STRIDES, (size_t[3]){0, 0, 0});
-            DftiSetValue(plan->desc, DFTI_OUTPUT_STRIDES, (size_t[3]){0, 0, 0});
-            DftiSetValue(plan->desc, DFTI_OUTPUT_BATCH_STRIDE,
-                         (size_t)nz * ny * sizeof(double) * 2);
-            DftiSetValue(plan->desc, DFTI_INPUT_BATCH_STRIDE,
-                         (size_t)nz * ny * sizeof(double) * 2);
-            break;
-
-        case CUFFT_D2Z:  // Real (double) → Complex (Z2Z)
-            DftiMakeDescriptor(&plan->desc, MKL_D2Z, MKL_DOUBLE, rank, n);
-            // Real→Complex: output is conjugate-even packed by default
-            // JDFTx uses UNPACKED, so:
-            DftiSetValue(plan->desc, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            DftiSetValue(plan->desc, DFTI_PACKED_FORMAT, DFTI_NOT_APPLICABLE);
-            DftiSetValue(plan->desc, DFTI_INPUT_STRIDES, (size_t[3]){0, 0, 0});
-            DftiSetValue(plan->desc, DFTI_OUTPUT_STRIDES, (size_t[3]){0, 0, 0});
-            DftiSetValue(plan->desc, DFTI_OUTPUT_BATCH_STRIDE,
-                         (size_t)(nz/2 + 1) * ny * sizeof(double) * 2);
-            DftiSetValue(plan->desc, DFTI_INPUT_BATCH_STRIDE,
-                         (size_t)nz * ny * sizeof(double));
-            break;
-
-        case CUFFT_Z2D:  // Complex → Real (double)
-            DftiMakeDescriptor(&plan->desc, MKL_Z2D, MKL_DOUBLE, rank, n);
-            DftiSetValue(plan->desc, DFTI_CONJUGATE_EVEN_STORAGE, DFTI_COMPLEX_COMPLEX);
-            DftiSetValue(plan->desc, DFTI_PACKED_FORMAT, DFTI_NOT_APPLICABLE);
-            DftiSetValue(plan->desc, DFTI_INPUT_STRIDES, (size_t[3]){0, 0, 0});
-            DftiSetValue(plan->desc, DFTI_OUTPUT_STRIDES, (size_t[3]){0, 0, 0});
-            DftiSetValue(plan->desc, DFTI_INPUT_BATCH_STRIDE,
-                         (size_t)(nz/2 + 1) * ny * sizeof(double) * 2);
-            DftiSetValue(plan->desc, DFTI_OUTPUT_BATCH_STRIDE,
-                         (size_t)nz * ny * sizeof(double));
-            break;
-
-        default:
-            return 1;  // unsupported
+    if (type == CUFFT_Z2Z) {
+        // Complex -> Complex
+        auto desc = new dft_descriptor_c16(n);
+        desc->set_value(oneapi::mkl::dft::config_param::PLACEMENT,
+                        oneapi::mkl::dft::config_value::NOT_INPLACE);
+        desc->commit(jdftx_sycl::queue());
+        return desc;
     }
+    else if (type == CUFFT_D2Z) {
+        // Real -> Complex
+        auto desc = new dft_descriptor_c16(n);
+        desc->set_value(oneapi::mkl::dft::config_param::PLACEMENT,
+                        oneapi::mkl::dft::config_value::NOT_INPLACE);
+        std::vector<std::int64_t> strides(6, 0);
+        desc->set_value(oneapi::mkl::dft::config_param::FWD_STRIDES, strides);
+        desc->set_value(oneapi::mkl::dft::config_param::BWD_STRIDES, strides);
+        desc->commit(jdftx_sycl::queue());
+        return desc;
+    }
+    else if (type == CUFFT_Z2D) {
+        // Complex -> Real
+        auto desc = new dft_descriptor_c16(n);
+        desc->set_value(oneapi::mkl::dft::config_param::PLACEMENT,
+                        oneapi::mkl::dft::config_value::NOT_INPLACE);
+        std::vector<std::int64_t> strides(6, 0);
+        desc->set_value(oneapi::mkl::dft::config_param::FWD_STRIDES, strides);
+        desc->set_value(oneapi::mkl::dft::config_param::BWD_STRIDES, strides);
+        desc->commit(jdftx_sycl::queue());
+        return desc;
+    }
+    return nullptr;
+}
 
-    DftiCommitDescriptor(plan->desc);
-    plan->initialized = true;
+// =====================================================================
+// cufftPlan3d
+// =====================================================================
+inline cudaError_t cufftPlan3d(cufftHandle* plan, int nx, int ny, int nz, int type) {
+    plan->desc = create_plan(type, nx, ny, nz);
+    plan->type = type;
+    plan->initialized = (plan->desc != nullptr);
     return cudaSuccess;
 }
 
 // =====================================================================
-// cufftExecZ2Z → DftiComputeForward/Backward
-// direction: CUFFT_FORWARD or CUFFT_INVERSE
+// cufftExecZ2Z: complex -> complex (forward/inverse)
 // =====================================================================
 inline cudaError_t cufftExecZ2Z(cufftHandle plan, const cuDoubleComplex* in,
                                  cuDoubleComplex* out, int direction) {
-    if (!plan.initialized) return 1;
-
-    if (direction == CUFFT_FORWARD || direction == CUFFT_INVERSE) {
-        DftiComputeDescriptor(
-            (direction == CUFFT_FORWARD) ? DFTI_FORWARD : DFTI_BACKWARD,
-            plan.desc,
-            (const MKL_Complex16*)in,
-            (MKL_Complex16*)out);
+    if (!plan.initialized || !plan.desc) return 1;
+    
+    if (direction == CUFFT_FORWARD) {
+        oneapi::mkl::dft::compute_forward(*plan.desc,
+            reinterpret_cast<const std::complex<double>*>(in),
+            reinterpret_cast<std::complex<double>*>(out),
+            {});
+    } else {
+        oneapi::mkl::dft::compute_backward(*plan.desc,
+            reinterpret_cast<const std::complex<double>*>(in),
+            reinterpret_cast<std::complex<double>*>(out),
+            {});
     }
     return cudaSuccess;
 }
 
 // =====================================================================
-// cufftExecD2Z → DftiComputeForward
+// cufftExecD2Z: real -> complex (forward only)
 // =====================================================================
 inline cudaError_t cufftExecD2Z(cufftHandle plan, const double* in,
                                  cuDoubleComplex* out) {
-    if (!plan.initialized) return 1;
-
-    DftiComputeDescriptor(DFTI_FORWARD, plan.desc,
-                          (const double*)in,
-                          (MKL_Complex16*)out);
+    if (!plan.initialized || !plan.desc) return 1;
+    
+    oneapi::mkl::dft::compute_forward(*plan.desc,
+        in,
+        reinterpret_cast<std::complex<double>*>(out),
+        {});
     return cudaSuccess;
 }
 
 // =====================================================================
-// cufftExecZ2D → DftiComputeBackward
+// cufftExecZ2D: complex -> real (backward only)
 // =====================================================================
 inline cudaError_t cufftExecZ2D(cufftHandle plan, const cuDoubleComplex* in,
                                  double* out) {
-    if (!plan.initialized) return 1;
-
-    DftiComputeDescriptor(DFTI_BACKWARD, plan.desc,
-                          (const MKL_Complex16*)in,
-                          (double*)out);
+    if (!plan.initialized || !plan.desc) return 1;
+    
+    oneapi::mkl::dft::compute_backward(*plan.desc,
+        reinterpret_cast<const std::complex<double>*>(in),
+        out,
+        {});
     return cudaSuccess;
 }
 
@@ -156,9 +134,9 @@ inline cudaError_t cufftExecZ2D(cufftHandle plan, const cuDoubleComplex* in,
 // =====================================================================
 inline cudaError_t cufftDestroy(cufftHandle plan) {
     if (plan.initialized && plan.desc) {
-        DftiFreeDescriptor(&plan.desc);
+        delete plan.desc;
     }
+    plan.desc = nullptr;
     plan.initialized = false;
-    plan.desc = 0;
     return cudaSuccess;
 }

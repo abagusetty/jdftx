@@ -27,7 +27,8 @@ void evalJeffereyAustinEOS_kernel(int nr, const double* Nbar, double* Aex, doubl
 }
 void evalJeffereyAustinEOS_gpu(int nr, const double* Nbar, double* Aex, double* Aex_N, double Vhs, const JeffereyAustinEOS_eval& eval)
 {	GpuLaunchConfig1D glc(evalJeffereyAustinEOS_kernel, nr);
-	evalJeffereyAustinEOS_kernel<<<glc.nBlocks, glc.nPerBlock>>>(nr, Nbar, Aex, Aex_N, Vhs, eval);
+	JDFTX_LAUNCH(evalJeffereyAustinEOS_kernel, glc.nBlocks, glc.nPerBlock, nr, Nbar, Aex, Aex_N, Vhs, eval);
+
 }
 
 
@@ -38,6 +39,7 @@ void evalTaoMasonEOS_kernel(int nr, const double* Nbar, double* Aex, double* Aex
 }
 void evalTaoMasonEOS_gpu(int nr, const double* Nbar, double* Aex, double* Aex_N, double Vhs, const TaoMasonEOS_eval& eval)
 {	GpuLaunchConfig1D glc(evalTaoMasonEOS_kernel, nr);
-	evalTaoMasonEOS_kernel<<<glc.nBlocks, glc.nPerBlock>>>(nr, Nbar, Aex, Aex_N, Vhs, eval);
+	JDFTX_LAUNCH(evalTaoMasonEOS_kernel, glc.nBlocks, glc.nPerBlock, nr, Nbar, Aex, Aex_N, Vhs, eval);
+
 }
 

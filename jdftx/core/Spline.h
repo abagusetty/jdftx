@@ -106,7 +106,7 @@ namespace QuinticSpline
 	
 	//Gradient propagation corresponding to value
 	//On the GPU, final results are accumulated using shared memory. (Uses 6 doubles per thread of the thread-block)
-	#ifdef __CUDA_ARCH__
+	#if defined(__CUDA_ARCH__) && !defined(JDFTX_DYNAMIC_SHARED) //CUDA: file-scope dynamic shared declaration
 	extern __shared__ double shared_E_coeff[];
 	#endif
 	__hostanddev__ void valueGrad(double E_value, double* E_coeff, double x)
@@ -131,6 +131,9 @@ namespace QuinticSpline
 		#ifndef __CUDA_ARCH__
 			for(int i=0; i<6; i++) E_coeff[j+i] += E_value * c[i];
 		#else
+			#ifdef JDFTX_DYNAMIC_SHARED //SYCL: work-group scratch is addressed per kernel, not at file scope
+			JDFTX_DYNAMIC_SHARED(double, shared_E_coeff);
+			#endif
 			int iThread = threadIdx.x;
 			for(int i=0; i<6; i++) shared_E_coeff[iThread*6+i] = E_value * c[i];
 			//Accumulate results to first thread:

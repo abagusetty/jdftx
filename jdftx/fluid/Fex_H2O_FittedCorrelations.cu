@@ -30,7 +30,6 @@ void Fex_H20_FittedCorrelations_kernel(int nr, const double* NObar, const double
 void Fex_H20_FittedCorrelations_gpu(int nr, const double* NObar, const double* NHbar,
 	double* Fex, double* Phi_NObar, double* Phi_NHbar)
 {	GpuLaunchConfig1D glc(Fex_H20_FittedCorrelations_kernel, nr);
-	JDFTX_LAUNCH(Fex_H20_FittedCorrelations_kernel, glc.nBlocks, glc.nPerBlock, nr, NObar, NHbar, Fex, Phi_NObar, Phi_NHbar);
-
+	JDFTX_LAUNCH(Fex_H20_FittedCorrelations_kernel, glc, nr, NObar, NHbar, Fex, Phi_NObar, Phi_NHbar);
 }
 

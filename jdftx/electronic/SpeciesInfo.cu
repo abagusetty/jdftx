@@ -29,20 +29,20 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 //Calculate non-local pseudopotential projector (or its k derivatives)
 template<int l, int m> __global__
 void Vnl_kernel(int nbasis, int atomStride, int nAtoms, vector3<> k, const vector3<int>* iGarr,
-	const matrix3<> G, const vector3<>* pos, const RadialFunctionG VnlRadial, complex* V)
+	const matrix3<> G, const vector3<>* pos, JDFTX_KERNEL_ARG(RadialFunctionG) VnlRadial, complex* V)
 {	int n = kernelIndex1D();
 	if(n<nbasis) Vnl_calc<l,m>(n, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, V);
 }
 template<int l, int m> __global__
 void VnlPrime_kernel(int nbasis, int atomStride, int nAtoms, vector3<> k, const vector3<int>* iGarr,
-	const matrix3<> G, const vector3<>* pos, const RadialFunctionG VnlRadial,
+	const matrix3<> G, const vector3<>* pos, JDFTX_KERNEL_ARG(RadialFunctionG) VnlRadial,
 	const vector3<> dir, const vector3<> RTdir, complex* V)
 {	int n = kernelIndex1D();
 	if(n<nbasis) VnlPrime_calc<l,m>(n, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, dir, RTdir, V);
 }
 template<int l, int m> __global__
 void VnlStress_kernel(int nbasis, int atomStride, int nAtoms, vector3<> k, const vector3<int>* iGarr,
-	const matrix3<> G, const vector3<>* pos, const RadialFunctionG VnlRadial,
+	const matrix3<> G, const vector3<>* pos, JDFTX_KERNEL_ARG(RadialFunctionG) VnlRadial,
 	int iDir, int jDir, complex* V)
 {	int n = kernelIndex1D();
 	if(n<nbasis) VnlStress_calc<l,m>(n, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, iDir, jDir, V);
@@ -57,18 +57,18 @@ void Vnl_gpu(int nbasis, int atomStride, int nAtoms, vector3<> k, const vector3<
 		int iDir = stressDir / 3;
 		int jDir = stressDir - 3*iDir;
 		GpuLaunchConfig1D glc(VnlStress_kernel<l,m>, nbasis);
-		VnlStress_kernelJDFTX_LAUNCH(l,m, glc, (nbasis, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, iDir, jDir, V));
+		JDFTX_LAUNCH_T(VnlStress_kernel, (l,m), glc, nbasis, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, iDir, jDir, V);
 		gpuErrorCheck();
 	}
 	else if(derivDir) //derivative w.r.t Cartesian k
 	{	const vector3<> RTdir = (2*M_PI)*(*derivDir * inv(G));
 		GpuLaunchConfig1D glc(VnlPrime_kernel<l,m>, nbasis);
-		VnlPrime_kernelJDFTX_LAUNCH(l,m, glc, (nbasis, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, *derivDir, RTdir, V));
+		JDFTX_LAUNCH_T(VnlPrime_kernel, (l,m), glc, nbasis, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, *derivDir, RTdir, V);
 		gpuErrorCheck();
 	}
 	else //value
 	{	GpuLaunchConfig1D glc(Vnl_kernel<l,m>, nbasis);
-		Vnl_kernelJDFTX_LAUNCH(l,m, glc, (nbasis, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, V));
+		JDFTX_LAUNCH_T(Vnl_kernel, (l,m), glc, nbasis, atomStride, nAtoms, k, iGarr, G, pos, VnlRadial, V);
 		gpuErrorCheck();
 	}
 }
@@ -91,7 +91,7 @@ template<int Nlm> void nAugment_gpu(const vector3<int> S, const matrix3<>& G, in
 	int nCoeff, double dGinv, const double* nRadial, const vector3<>& atpos, complex* n, const vector3<>* atposDeriv)
 {	GpuLaunchConfigHalf3D glc(nAugment_kernel<Nlm>, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		nAugment_kernelJDFTX_LAUNCH(Nlm, glc, (zBlock, S, G, iGstart, iGstop, nCoeff, dGinv, nRadial, atpos, n, atposDeriv));
+		JDFTX_LAUNCH_T(nAugment_kernel, (Nlm), glc, zBlock, S, G, iGstart, iGstop, nCoeff, dGinv, nRadial, atpos, n, atposDeriv);
 	gpuErrorCheck();
 }
 void nAugment_gpu(int Nlm, const vector3<int> S, const matrix3<>& G, int iGstart, int iGstop,
@@ -143,12 +143,11 @@ template<int Nlm> void nAugmentGrad_gpu(const vector3<int> S, const matrix3<>& G
 	GpuBuffer E_nRadialTemp(nCoeff*Nlm*8);
 	E_nRadialTemp.zero();
 	//Stage 1: calculate with the scattered accumulate to E_nRadial
-	// TODO: Port shared memory reduction in nAugmentGrad_kernel
-JDFTX_LAUNCH(nAugmentGrad_kernel<Nlm>, glc, S, G, nCoeff, dGinv, nRadial, atpos, ccE_n, E_nRadialTemp, E_atpos, E_RRT, atposDeriv, nagIndex, nagIndexPtr);
+	JDFTX_LAUNCH_T_DIM_SHARED(nAugmentGrad_kernel, (Nlm), nBlocks, nPerBlock, sharedMemPerThread*nPerBlock, S, G, nCoeff, dGinv, nRadial, atpos, ccE_n, E_nRadialTemp, E_atpos, E_RRT, atposDeriv, nagIndex, nagIndexPtr);
 	gpuErrorCheck();
 	//Stage 2: collect from E_nRadialTemp to E_nRadial
 	GpuLaunchConfig1D glc(nAugmentGrad_collectKernel, nCoeff*Nlm);
-	JDFTX_LAUNCH(nAugmentGrad_collectKernel, glc.nBlocks,glc.nPerBlock, nCoeff*Nlm, E_nRadialTemp, E_nRadial);
+	JDFTX_LAUNCH(nAugmentGrad_collectKernel, glc, nCoeff*Nlm, E_nRadialTemp, E_nRadial);
 	gpuErrorCheck();
 	cudaDeviceSynchronize();
 }
@@ -170,7 +169,7 @@ void getSG_kernel(int zBlock, const vector3<int> S, int nAtoms, const vector3<>*
 void getSG_gpu(const vector3<int> S, int nAtoms, const vector3<>* atpos, double invVol, complex* SG)
 {	GpuLaunchConfigHalf3D glc(getSG_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(getSG_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, nAtoms, atpos, invVol, SG);
+		JDFTX_LAUNCH(getSG_kernel, glc, zBlock, S, nAtoms, atpos, invVol, SG);
 	gpuErrorCheck();
 }
 
@@ -178,8 +177,8 @@ void getSG_gpu(const vector3<int> S, int nAtoms, const vector3<>* atpos, double 
 __global__
 void updateLocal_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT,
 	complex *Vlocps,  complex *rhoIon, complex *nChargeball, complex *nCore, complex* tauCore,
-	int nAtoms, const vector3<>* atpos, double invVol, const RadialFunctionG VlocRadial,
-	double Z, const RadialFunctionG nCoreRadial, const RadialFunctionG tauCoreRadial,
+	int nAtoms, const vector3<>* atpos, double invVol, JDFTX_KERNEL_ARG(RadialFunctionG) VlocRadial,
+	double Z, JDFTX_KERNEL_ARG(RadialFunctionG) nCoreRadial, JDFTX_KERNEL_ARG(RadialFunctionG) tauCoreRadial,
 	double Zchargeball, double wChargeballSq)
 {
 	COMPUTE_halfGindices
@@ -194,10 +193,9 @@ void updateLocal_gpu(const vector3<int> S, const matrix3<> GGT,
 	double Zchargeball, double wChargeballSq)
 {	GpuLaunchConfigHalf3D glc(updateLocal_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(updateLocal_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, Vlocps, rhoIon, nChargeball,
+		JDFTX_LAUNCH(updateLocal_kernel, glc, zBlock, S, GGT, Vlocps, rhoIon, nChargeball,
 			nCore, tauCore, nAtoms, atpos, invVol, VlocRadial,
 			Z, nCoreRadial, tauCoreRadial, Zchargeball, wChargeballSq);
-
 	gpuErrorCheck();
 }
 
@@ -206,8 +204,8 @@ __global__
 void gradLocalToSG_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT,
 	const complex* ccgrad_Vlocps, const complex* ccgrad_rhoIon, const complex* ccgrad_nChargeball,
 	const complex* ccgrad_nCore, const complex* ccgrad_tauCore, complex* ccgrad_SG,
-	const RadialFunctionG VlocRadial, double Z,
-	const RadialFunctionG nCoreRadial, const RadialFunctionG tauCoreRadial,
+	JDFTX_KERNEL_ARG(RadialFunctionG) VlocRadial, double Z,
+	JDFTX_KERNEL_ARG(RadialFunctionG) nCoreRadial, JDFTX_KERNEL_ARG(RadialFunctionG) tauCoreRadial,
 	double Zchargeball, double wChargeballSq)
 {
 	COMPUTE_halfGindices
@@ -223,11 +221,10 @@ void gradLocalToSG_gpu(const vector3<int> S, const matrix3<> GGT,
 	double Zchargeball, double wChargeballSq)
 {	GpuLaunchConfigHalf3D glc(gradLocalToSG_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(gradLocalToSG_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT,
+		JDFTX_LAUNCH(gradLocalToSG_kernel, glc, zBlock, S, GGT,
 			ccgrad_Vlocps, ccgrad_rhoIon, ccgrad_nChargeball,
 			ccgrad_nCore, ccgrad_tauCore, ccgrad_SG, VlocRadial, Z,
 			nCoreRadial, tauCoreRadial, Zchargeball, wChargeballSq);
-
 	gpuErrorCheck();
 }
 
@@ -243,7 +240,7 @@ void gradSGtoAtpos_gpu(const vector3<int> S, const vector3<> atpos,
 	const complex* ccgrad_SG, vector3<complex*> grad_atpos)
 {	GpuLaunchConfigHalf3D glc(gradSGtoAtpos_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(gradSGtoAtpos_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, atpos, ccgrad_SG, grad_atpos);
+		JDFTX_LAUNCH(gradSGtoAtpos_kernel, glc, zBlock, S, atpos, ccgrad_SG, grad_atpos);
 	gpuErrorCheck();
 }
 
@@ -252,8 +249,8 @@ __global__
 void gradLocalToStress_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT,
 	const complex* ccgrad_Vlocps, const complex* ccgrad_rhoIon, const complex* ccgrad_nChargeball,
 	const complex* ccgrad_nCore, const complex* ccgrad_tauCore, symmetricMatrix3<>* grad_RRT,
-	int nAtoms, const vector3<>* atpos, const RadialFunctionG VlocRadial, double Z,
-	const RadialFunctionG nCoreRadial, const RadialFunctionG tauCoreRadial,
+	int nAtoms, const vector3<>* atpos, JDFTX_KERNEL_ARG(RadialFunctionG) VlocRadial, double Z,
+	JDFTX_KERNEL_ARG(RadialFunctionG) nCoreRadial, JDFTX_KERNEL_ARG(RadialFunctionG) tauCoreRadial,
 	double Zchargeball, double wChargeballSq)
 {
 	COMPUTE_halfGindices
@@ -269,10 +266,9 @@ void gradLocalToStress_gpu(const vector3<int> S, const matrix3<> GGT,
 	double Zchargeball, double wChargeballSq)
 {	GpuLaunchConfigHalf3D glc(gradLocalToStress_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(gradLocalToStress_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT,
+		JDFTX_LAUNCH(gradLocalToStress_kernel, glc, zBlock, S, GGT,
 			ccgrad_Vlocps, ccgrad_rhoIon, ccgrad_nChargeball,
 			ccgrad_nCore, ccgrad_tauCore, grad_RRT, nAtoms, atpos, VlocRadial, Z,
 			nCoreRadial, tauCoreRadial, Zchargeball, wChargeballSq);
-
 	gpuErrorCheck();
 }

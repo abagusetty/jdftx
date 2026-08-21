@@ -32,7 +32,7 @@ void spinDiagonalize_kernel(int N, array<const double*,4> n, array<const double*
 }
 void spinDiagonalize_gpu(int N, std::vector<const double*> n, std::vector<const double*> x, std::vector<double*> xDiag)
 {	GpuLaunchConfig1D glc(spinDiagonalize_kernel, N);
-	JDFTX_LAUNCH(spinDiagonalize_kernel, glc.nBlocks,glc.nPerBlock, N, n, x, xDiag);
+	JDFTX_LAUNCH(spinDiagonalize_kernel, glc, N, n, x, xDiag);
 	gpuErrorCheck();
 }
 
@@ -43,7 +43,7 @@ void spinDiagonalizeGrad_kernel(int N, array<const double*,4> n, array<const dou
 }
 void spinDiagonalizeGrad_gpu(int N, std::vector<const double*> n, std::vector<const double*> x, std::vector<const double*> E_xDiag, std::vector<double*> E_n, std::vector<double*> E_x)
 {	GpuLaunchConfig1D glc(spinDiagonalizeGrad_kernel, N);
-	JDFTX_LAUNCH(spinDiagonalizeGrad_kernel, glc.nBlocks,glc.nPerBlock, N, n, x, E_xDiag, E_n, E_x);
+	JDFTX_LAUNCH(spinDiagonalizeGrad_kernel, glc, N, n, x, E_xDiag, E_n, E_x);
 	gpuErrorCheck();
 }
 
@@ -57,7 +57,7 @@ void LDA_kernel(int N, array<const double*,nCount> n, double* E, array<double*,n
 template<LDA_Variant variant, int nCount>
 void LDA_gpu(int N, array<const double*,nCount> n, double* E, array<double*,nCount> E_n, double scaleFac)
 {	GpuLaunchConfig1D glc(LDA_kernel<variant,nCount>, N);
-	LDA_kernelJDFTX_LAUNCH(variant,nCount, glc, (N, n, E, E_n, scaleFac));
+	JDFTX_LAUNCH_T(LDA_kernel, (variant,nCount), glc, N, n, E, E_n, scaleFac);
 	gpuErrorCheck();
 }
 void LDA_gpu(LDA_Variant variant, int N, std::vector<const double*> n, double* E, std::vector<double*> E_n, double scaleFac)
@@ -76,7 +76,7 @@ template<GGA_Variant variant, bool spinScaling, int nCount>
 void GGA_gpu(int N, array<const double*,nCount> n, array<const double*,2*nCount-1> sigma,
 	double* E, array<double*,nCount> E_n, array<double*,2*nCount-1> E_sigma, double scaleFac)
 {	GpuLaunchConfig1D glc(GGA_kernel<variant,spinScaling,nCount>, N);
-	GGA_kernelJDFTX_LAUNCH(variant,spinScaling,nCount, glc, (N, n, sigma, E, E_n, E_sigma, scaleFac));
+	JDFTX_LAUNCH_T(GGA_kernel, (variant,spinScaling,nCount), glc, N, n, sigma, E, E_n, E_sigma, scaleFac);
 	gpuErrorCheck();
 }
 void GGA_gpu(GGA_Variant variant, int N, std::vector<const double*> n, std::vector<const double*> sigma,
@@ -101,8 +101,8 @@ void mGGA_gpu(int N, array<const double*,nCount> n, array<const double*,2*nCount
 	double* E, array<double*,nCount> E_n, array<double*,2*nCount-1> E_sigma,
 	array<double*,nCount> E_lap, array<double*,nCount> E_tau, double scaleFac)
 {	GpuLaunchConfig1D glc(mGGA_kernel<variant,spinScaling,nCount>, N);
-	mGGA_kernelJDFTX_LAUNCH(variant,spinScaling,nCount, glc, (N,
-		n, sigma, lap, tau, E, E_n, E_sigma, E_lap, E_tau, scaleFac));
+	JDFTX_LAUNCH_T(mGGA_kernel, (variant,spinScaling,nCount), glc, N,
+		n, sigma, lap, tau, E, E_n, E_sigma, E_lap, E_tau, scaleFac);
 	gpuErrorCheck();
 }
 void mGGA_gpu(mGGA_Variant variant, int N, std::vector<const double*> n, std::vector<const double*> sigma,

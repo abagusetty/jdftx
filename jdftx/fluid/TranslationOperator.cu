@@ -31,7 +31,7 @@ void constantSplineTaxpy_gpu(const vector3<int> S,
 	double alpha, const double* x, double* y, const vector3<int> Tint)
 {	GpuLaunchConfig3D glc(constantSplineTaxpy_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(constantSplineTaxpy_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, alpha, x, y, Tint);
+		JDFTX_LAUNCH(constantSplineTaxpy_kernel, glc, zBlock, S, alpha, x, y, Tint);
 	gpuErrorCheck();
 }
 
@@ -45,7 +45,7 @@ void linearSplineTaxpy_gpu(const vector3<int> S,
 	double alpha, const double* x, double* y, const vector3<int> Tint, const vector3<> Tfrac)
 {	GpuLaunchConfig3D glc(linearSplineTaxpy_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(linearSplineTaxpy_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, alpha, x, y, Tint, Tfrac);
+		JDFTX_LAUNCH(linearSplineTaxpy_kernel, glc, zBlock, S, alpha, x, y, Tint, Tfrac);
 	gpuErrorCheck();
 }
 
@@ -59,5 +59,5 @@ void fourierTranslate_kernel(int zBlock, const vector3<int> S, const vector3<> G
 void fourierTranslate_gpu(const vector3<int> S, const vector3<> Gt, complex* xTilde)
 {	GpuLaunchConfigHalf3D glc(fourierTranslate_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(fourierTranslate_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, Gt, xTilde);
+		JDFTX_LAUNCH(fourierTranslate_kernel, glc, zBlock, S, Gt, xTilde);
 }

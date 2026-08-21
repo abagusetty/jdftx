@@ -29,7 +29,7 @@ void RealG_kernel(int zBlock, const vector3<int> S, const complex* vFull, comple
 void RealG_gpu(const vector3<int> S, const complex* vFull, complex* vHalf, double scaleFac)
 {	GpuLaunchConfigHalf3D glc(RealG_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(RealG_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, vFull, vHalf, scaleFac);
+		JDFTX_LAUNCH(RealG_kernel, glc, zBlock, S, vFull, vHalf, scaleFac);
 	gpuErrorCheck();
 }
 
@@ -41,7 +41,7 @@ void ImagG_kernel(int zBlock, const vector3<int> S, const complex* vFull, comple
 void ImagG_gpu(const vector3<int> S, const complex* vFull, complex* vHalf, double scaleFac)
 {	GpuLaunchConfigHalf3D glc(ImagG_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(ImagG_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, vFull, vHalf, scaleFac);
+		JDFTX_LAUNCH(ImagG_kernel, glc, zBlock, S, vFull, vHalf, scaleFac);
 	gpuErrorCheck();
 }
 
@@ -53,7 +53,7 @@ void ComplexG_kernel(int zBlock, const vector3<int> S, const complex* vHalf, com
 void ComplexG_gpu(const vector3<int> S, const complex* vHalf, complex *vFull, double scaleFac)
 {	GpuLaunchConfigHalf3D glc(ComplexG_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(ComplexG_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, vHalf, vFull, scaleFac);
+		JDFTX_LAUNCH(ComplexG_kernel, glc, zBlock, S, vHalf, vFull, scaleFac);
 	gpuErrorCheck();
 }
 
@@ -67,7 +67,7 @@ void L_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT, complex* v)
 void L_gpu(const vector3<int> S, const matrix3<> GGT, complex* v)
 {	GpuLaunchConfigHalf3D glc(L_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(L_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, v);
+		JDFTX_LAUNCH(L_kernel, glc, zBlock, S, GGT, v);
 	gpuErrorCheck();
 }
 
@@ -79,7 +79,7 @@ void Linv_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT, complex*
 void Linv_gpu(const vector3<int> S, const matrix3<> GGT, complex* v)
 {	GpuLaunchConfigHalf3D glc(Linv_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(Linv_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, v);
+		JDFTX_LAUNCH(Linv_kernel, glc, zBlock, S, GGT, v);
 	gpuErrorCheck();
 }
 
@@ -91,7 +91,7 @@ void fullL_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT, complex
 void fullL_gpu(const vector3<int> S, const matrix3<> GGT, complex* v)
 {	GpuLaunchConfig3D glc(fullL_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(fullL_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, v);
+		JDFTX_LAUNCH(fullL_kernel, glc, zBlock, S, GGT, v);
 	gpuErrorCheck();
 }
 
@@ -104,7 +104,7 @@ void fullLinv_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT, vect
 void fullLinv_gpu(const vector3<int> S, const matrix3<> GGT, vector3<> k, complex* v)
 {	GpuLaunchConfig3D glc(fullLinv_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(fullLinv_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, k, v);
+		JDFTX_LAUNCH(fullLinv_kernel, glc, zBlock, S, GGT, k, v);
 	gpuErrorCheck();
 }
 
@@ -118,7 +118,7 @@ void Lstress_kernel(int zBlock, vector3<int> S, const complex* X, const complex*
 void Lstress_gpu(vector3<int> S, const complex* X, const complex* Y, symmetricMatrix3<>* grad_RRT)
 {	GpuLaunchConfigHalf3D glc(Lstress_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(Lstress_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, X, Y, grad_RRT);
+		JDFTX_LAUNCH(Lstress_kernel, glc, zBlock, S, X, Y, grad_RRT);
 }
 
 __global__
@@ -133,7 +133,7 @@ void LinvStress_kernel(int zBlock, vector3<int> S, const matrix3<> GGT, const co
 void LinvStress_gpu(vector3<int> S, const matrix3<>& GGT, const complex* X, const complex* Y, symmetricMatrix3<>* grad_RRT)
 {	GpuLaunchConfigHalf3D glc(LinvStress_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(LinvStress_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, X, Y, grad_RRT);
+		JDFTX_LAUNCH(LinvStress_kernel, glc, zBlock, S, GGT, X, Y, grad_RRT);
 }
 
 
@@ -145,7 +145,7 @@ void D_kernel(int zBlock, const vector3<int> S, const complex* in, complex* out,
 void D_gpu(const vector3<int> S, const complex* in, complex* out, vector3<> Ge)
 {	GpuLaunchConfigHalf3D glc(D_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(D_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, in, out, Ge);
+		JDFTX_LAUNCH(D_kernel, glc, zBlock, S, in, out, Ge);
 	gpuErrorCheck();
 }
 
@@ -157,7 +157,7 @@ void DD_kernel(int zBlock, const vector3<int> S, const complex* in, complex* out
 void DD_gpu(const vector3<int> S, const complex* in, complex* out, vector3<> Ge1, vector3<> Ge2)
 {	GpuLaunchConfigHalf3D glc(DD_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(DD_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, in, out, Ge1, Ge2);
+		JDFTX_LAUNCH(DD_kernel, glc, zBlock, S, in, out, Ge1, Ge2);
 	gpuErrorCheck();
 }
 
@@ -170,7 +170,7 @@ template<int l> void lGradient_gpu(const vector3<int>& S, const complex* in, arr
 {	const complex lPhase = cis(l*0.5*M_PI);
 	GpuLaunchConfigHalf3D glc(lGradient_kernel<l>, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		lGradient_kernelJDFTX_LAUNCH(l, glc, (zBlock, S, lPhase, in, out, G));
+		JDFTX_LAUNCH_T(lGradient_kernel, (l), glc, zBlock, S, lPhase, in, out, G);
 	gpuErrorCheck();
 }
 void lGradient_gpu(const vector3<int>& S, const complex* in, std::vector<complex*> out, int l, const matrix3<>& G)
@@ -186,7 +186,7 @@ template<int l> void lDivergence_gpu(const vector3<int>& S, array<const complex*
 {	const complex lPhase = cis(l*0.5*M_PI);
 	GpuLaunchConfigHalf3D glc(lDivergence_kernel<l>, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		lDivergence_kernelJDFTX_LAUNCH(l, glc, (zBlock, S, lPhase, in, out, G));
+		JDFTX_LAUNCH_T(lDivergence_kernel, (l), glc, zBlock, S, lPhase, in, out, G);
 	gpuErrorCheck();
 }
 void lDivergence_gpu(const vector3<int>& S, const std::vector<const complex*>& in, complex* out, int l, const matrix3<>& G)
@@ -195,7 +195,7 @@ void lDivergence_gpu(const vector3<int>& S, const std::vector<const complex*>& i
 
 
 template<int l, int m> __global__
-void lGradientStress_kernel(int zBlock, const vector3<int> S, const matrix3<> G, const RadialFunctionG w, const complex* X, const complex* Y, symmetricMatrix3<>* grad_RRT, complex lPhase)
+void lGradientStress_kernel(int zBlock, const vector3<int> S, const matrix3<> G, JDFTX_KERNEL_ARG(RadialFunctionG) w, const complex* X, const complex* Y, symmetricMatrix3<>* grad_RRT, complex lPhase)
 {	COMPUTE_halfGindices
 	double weight = real(conj(X[i]) * Y[i] * lPhase) * (IS_NYQUIST
 			? 0 //drop nyquist frequency contributions
@@ -206,7 +206,7 @@ template<int l, int m> void lGradientStress_gpu(const vector3<int>& S, const mat
 {	const complex lPhase = cis(l*0.5*M_PI);
 	GpuLaunchConfigHalf3D glc(lGradientStress_kernel<l,m>, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		lGradientStress_kernelJDFTX_LAUNCH(l,m, glc, (zBlock, S, G, w, X, Y, grad_RRT, lPhase));
+		JDFTX_LAUNCH_T(lGradientStress_kernel, (l,m), glc, zBlock, S, G, w, X, Y, grad_RRT, lPhase);
 	gpuErrorCheck();
 }
 void lGradientStress_gpu(const vector3<int>& S, const matrix3<>& G, const RadialFunctionG& w, const complex* X, const complex* Y, int l, int m, symmetricMatrix3<>* grad_RRT)
@@ -222,14 +222,14 @@ void multiplyBlochPhase_kernel(int zBlock, const vector3<int> S, const vector3<>
 void multiplyBlochPhase_gpu(const vector3<int>& S, const vector3<>& invS, complex* v, const vector3<>& k)
 {	GpuLaunchConfig3D glc(multiplyBlochPhase_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-JDFTX_LAUNCH(multiplyBlochPhase_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, invS, v, k);
+		 JDFTX_LAUNCH(multiplyBlochPhase_kernel, glc, zBlock, S, invS, v, k);
 	gpuErrorCheck();
 }
 
 
 __global__
 void radialFunction_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT,
-	complex* F, const RadialFunctionG f, vector3<> r0)
+	complex* F, JDFTX_KERNEL_ARG(RadialFunctionG) f, vector3<> r0)
 {	COMPUTE_halfGindices
 	F[i] = radialFunction_calc(iG, GGT, f, r0);
 }
@@ -237,24 +237,24 @@ void radialFunction_gpu(const vector3<int> S, const matrix3<>& GGT,
 	complex* F, const RadialFunctionG& f, vector3<> r0)
 {	GpuLaunchConfigHalf3D glc(radialFunction_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(radialFunction_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, F, f, r0);
+		JDFTX_LAUNCH(radialFunction_kernel, glc, zBlock, S, GGT, F, f, r0);
 	gpuErrorCheck();
 }
 
 __global__
-void radialFunctionMultiply_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT, complex* in, const RadialFunctionG f)
+void radialFunctionMultiply_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT, complex* in, JDFTX_KERNEL_ARG(RadialFunctionG) f)
 {	COMPUTE_halfGindices
 	in[i] *= f(sqrt(GGT.metric_length_squared(iG)));
 }
 void radialFunctionMultiply_gpu(const vector3<int> S, const matrix3<>& GGT, complex* in, const RadialFunctionG& f)
 {	GpuLaunchConfigHalf3D glc(radialFunctionMultiply_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(radialFunctionMultiply_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, in, f);
+		JDFTX_LAUNCH(radialFunctionMultiply_kernel, glc, zBlock, S, GGT, in, f);
 	gpuErrorCheck();
 }
 
 __global__
-void convolveStress_kernel(int zBlock, vector3<int> S, const matrix3<> GGT, const RadialFunctionG w, const complex* X, const complex* Y, symmetricMatrix3<>* grad_RRT)
+void convolveStress_kernel(int zBlock, vector3<int> S, const matrix3<> GGT, JDFTX_KERNEL_ARG(RadialFunctionG) w, const complex* X, const complex* Y, symmetricMatrix3<>* grad_RRT)
 {	COMPUTE_halfGindices
 	double weight = ((iG[2]==0) or (2*iG[2]==S[2])) ? 1 : 2; //weight factor for points in reduced reciprocal space of real scalar fields
 	double G = sqrt(GGT.metric_length_squared(iG));
@@ -265,7 +265,7 @@ void convolveStress_kernel(int zBlock, vector3<int> S, const matrix3<> GGT, cons
 void convolveStress_gpu(vector3<int> S, const matrix3<>& GGT, const RadialFunctionG& w, const complex* X, const complex* Y, symmetricMatrix3<>* grad_RRT)
 {	GpuLaunchConfigHalf3D glc(convolveStress_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(convolveStress_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, w, X, Y, grad_RRT);
+		JDFTX_LAUNCH(convolveStress_kernel, glc, zBlock, S, GGT, w, X, Y, grad_RRT);
 }
 
 __global__
@@ -274,7 +274,7 @@ void exp_kernel(int N, double* X, double prefac)
 }
 void exp_gpu(int N, double* X, double prefac)
 {	GpuLaunchConfig1D glc(exp_kernel, N);
-	JDFTX_LAUNCH(exp_kernel, glc.nBlocks,glc.nPerBlock, N, X, prefac);
+	JDFTX_LAUNCH(exp_kernel, glc, N, X, prefac);
 	gpuErrorCheck();
 }
 
@@ -284,7 +284,7 @@ void log_kernel(int N, double* X, double prefac)
 }
 void log_gpu(int N, double* X, double prefac)
 {	GpuLaunchConfig1D glc(log_kernel, N);
-	JDFTX_LAUNCH(log_kernel, glc.nBlocks,glc.nPerBlock, N, X, prefac);
+	JDFTX_LAUNCH(log_kernel, glc, N, X, prefac);
 	gpuErrorCheck();
 }
 
@@ -294,7 +294,7 @@ void sqrt_kernel(int N, double* X, double prefac)
 }
 void sqrt_gpu(int N, double* X, double prefac)
 {	GpuLaunchConfig1D glc(sqrt_kernel, N);
-	JDFTX_LAUNCH(sqrt_kernel, glc.nBlocks,glc.nPerBlock, N, X, prefac);
+	JDFTX_LAUNCH(sqrt_kernel, glc, N, X, prefac);
 	gpuErrorCheck();
 }
 
@@ -304,7 +304,7 @@ void inv_kernel(int N, double* X, double prefac)
 }
 void inv_gpu(int N, double* X, double prefac)
 {	GpuLaunchConfig1D glc(inv_kernel, N);
-	JDFTX_LAUNCH(inv_kernel, glc.nBlocks,glc.nPerBlock, N, X, prefac);
+	JDFTX_LAUNCH(inv_kernel, glc, N, X, prefac);
 	gpuErrorCheck();
 }
 
@@ -314,7 +314,7 @@ void pow_kernel(int N, double* X, double scale, double alpha)
 }
 void pow_gpu(int N, double* X, double scale, double alpha)
 {	GpuLaunchConfig1D glc(pow_kernel, N);
-	JDFTX_LAUNCH(pow_kernel, glc.nBlocks,glc.nPerBlock, N, X, scale, alpha);
+	JDFTX_LAUNCH(pow_kernel, glc, N, X, scale, alpha);
 	gpuErrorCheck();
 }
 
@@ -326,7 +326,7 @@ void gaussConvolve_kernel(int zBlock, const vector3<int> S, const matrix3<> GGT,
 void gaussConvolve_gpu(const vector3<int>& S, const matrix3<>& GGT, complex* data, double sigma)
 {	GpuLaunchConfig3D glc(gaussConvolve_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(gaussConvolve_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, GGT, data, sigma);
+		JDFTX_LAUNCH(gaussConvolve_kernel, glc, zBlock, S, GGT, data, sigma);
 }
 
 
@@ -338,7 +338,7 @@ void changeGrid_kernel(int zBlock, const vector3<int> S, const vector3<int> Sin,
 void changeGrid_gpu(const vector3<int>& S, const vector3<int>& Sin, const vector3<int>& Sout, const complex* in, complex* out)
 {	GpuLaunchConfigHalf3D glc(changeGrid_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(changeGrid_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, Sin, Sout, in, out);
+		JDFTX_LAUNCH(changeGrid_kernel, glc, zBlock, S, Sin, Sout, in, out);
 	gpuErrorCheck();
 }
 
@@ -350,7 +350,7 @@ void changeGridFull_kernel(int zBlock, const vector3<int> S, const vector3<int> 
 void changeGridFull_gpu(const vector3<int>& S, const vector3<int>& Sin, const vector3<int>& Sout, const complex* in, complex* out)
 {	GpuLaunchConfig3D glc(changeGridFull_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(changeGridFull_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, Sin, Sout, in, out);
+		JDFTX_LAUNCH(changeGridFull_kernel, glc, zBlock, S, Sin, Sout, in, out);
 	gpuErrorCheck();
 }
 
@@ -363,7 +363,7 @@ void gradient_kernel(int zBlock, const vector3<int> S, const matrix3<> G, const 
 void gradient_gpu(const vector3<int> S, const matrix3<> G, const complex* Xtilde, vector3<complex*> gradTilde)
 {	GpuLaunchConfigHalf3D glc(gradient_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(gradient_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, G, Xtilde, gradTilde);
+		JDFTX_LAUNCH(gradient_kernel, glc, zBlock, S, G, Xtilde, gradTilde);
 	gpuErrorCheck();
 }
 
@@ -376,7 +376,7 @@ void divergence_kernel(int zBlock, const vector3<int> S, const matrix3<> G, vect
 void divergence_gpu(const vector3<int> S, const matrix3<> G, vector3<const complex*> Vtilde, complex* divTilde)
 {	GpuLaunchConfigHalf3D glc(divergence_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(divergence_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, G, Vtilde, divTilde);
+		JDFTX_LAUNCH(divergence_kernel, glc, zBlock, S, G, Vtilde, divTilde);
 	gpuErrorCheck();
 }
 
@@ -389,7 +389,7 @@ void tensorGradient_kernel(int zBlock, const vector3<int> S, const matrix3<> G, 
 void tensorGradient_gpu(const vector3<int> S, const matrix3<> G, const complex* Xtilde, tensor3<complex*> gradTilde)
 {	GpuLaunchConfigHalf3D glc(tensorGradient_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(tensorGradient_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, G, Xtilde, gradTilde);
+		JDFTX_LAUNCH(tensorGradient_kernel, glc, zBlock, S, G, Xtilde, gradTilde);
 	gpuErrorCheck();
 }
 
@@ -402,6 +402,6 @@ void tensorDivergence_kernel(int zBlock, const vector3<int> S, const matrix3<> G
 void tensorDivergence_gpu(const vector3<int> S, const matrix3<> G, tensor3<const complex*> Vtilde, complex* divTilde)
 {	GpuLaunchConfigHalf3D glc(tensorDivergence_kernel, S);
 	for(int zBlock=0; zBlock<glc.zBlockMax; zBlock++)
-		JDFTX_LAUNCH(tensorDivergence_kernel, glc.nBlocks,glc.nPerBlock, zBlock, S, G, Vtilde, divTilde);
+		JDFTX_LAUNCH(tensorDivergence_kernel, glc, zBlock, S, G, Vtilde, divTilde);
 	gpuErrorCheck();
 }

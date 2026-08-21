@@ -35,8 +35,8 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 #include <core/Thread.h>
 
 #ifdef GPU_ENABLED
-#include "gsycl/cublas_v2.h"
-#include "gsycl/cuda_runtime.h"
+#include <cublas_v2.h>
+#include <cuda_runtime.h>
 #endif
 
 /** @brief Templated elementwise multiply Y *= X for arrays X, Y

@@ -18,7 +18,7 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 -------------------------------------------------------------------*/
 
 #include <core/GpuKernelUtils.h>
-#include "gsycl/cublas_v2.h"
+#include <cublas_v2.h>
 
 __global__
 void matrixSubGet_kernel(int nr, int iStart, int iStep, int iDelta, int jStart, int jStep, int jDelta, const complex* in, complex* out)
@@ -29,7 +29,7 @@ void matrixSubGet_kernel(int nr, int iStart, int iStep, int iDelta, int jStart, 
 }
 void matrixSubGet_gpu(int nr, int iStart, int iStep, int iDelta, int jStart, int jStep, int jDelta, const complex* in, complex* out)
 {	GpuLaunchConfig3D glc(matrixSubGet_kernel, vector3<int>(1,jDelta,iDelta));
-	JDFTX_LAUNCH(matrixSubGet_kernel, glc.nBlocks,glc.nPerBlock, nr, iStart,iStep,iDelta, jStart,jStep,jDelta, in, out);
+	JDFTX_LAUNCH(matrixSubGet_kernel, glc, nr, iStart,iStep,iDelta, jStart,jStep,jDelta, in, out);
 	gpuErrorCheck();
 }
 
@@ -42,7 +42,7 @@ void matrixSubGet_gpu(int nr, int iStart, int iStep, int iDelta, int jStart, int
 	} \
 	void matrixSub ##NAME## _gpu(int nr, int iStart, int iStep, int iDelta, int jStart, int jStep, int jDelta, const complex* in, complex* out) \
 	{	GpuLaunchConfig3D glc(matrixSub ##NAME## _kernel, vector3<int>(1,jDelta,iDelta)); \
-JDFTX_LAUNCH(_kernel, glc.nBlocks,glc.nPerBlock, nr, iStart,iStep,iDelta, jStart,jStep,jDelta, in, out)
+		JDFTX_LAUNCH(matrixSub ##NAME## _kernel, glc, nr, iStart,iStep,iDelta, jStart,jStep,jDelta, in, out); \
 		gpuErrorCheck(); \
 	}
 DECLARE_matrixSubSetAccum(Set, =)
@@ -76,12 +76,12 @@ template<typename scalar> void mulMD_gpu(int nRows, int nCols, const complex* M,
 		return;
 	}
 	GpuLaunchConfig3D glc(mulMD_kernel<scalar>, vector3<int>(1,nCols,nRows));
-	mulMD_kernelJDFTX_LAUNCH(scalar, glc, (nRows, nCols, M, D, out));
+	JDFTX_LAUNCH_T(mulMD_kernel, (scalar), glc, nRows, nCols, M, D, out);
 	gpuErrorCheck();
 }
 template<typename scalar> void mulDM_gpu(int nRows, int nCols, const scalar* D, const complex* M, complex* out)
 {	GpuLaunchConfig3D glc(mulDM_kernel<scalar>, vector3<int>(1,nCols,nRows));
-	mulDM_kernelJDFTX_LAUNCH(scalar, glc, (nRows, nCols, D, M, out));
+	JDFTX_LAUNCH_T(mulDM_kernel, (scalar), glc, nRows, nCols, D, M, out);
 	gpuErrorCheck();
 }
 void mulMDdouble_gpu(int nRows, int nCols, const complex* M, const double* D, complex* out) { mulMD_gpu<double>(nRows, nCols, M, D, out); }
@@ -102,7 +102,7 @@ void diagDot_kernel(int nRows, int nCols, const complex* X, const complex* Y, do
 }
 void diagDot_gpu(int nRows, int nCols, const complex* X, const complex* Y, double* out)
 {	GpuLaunchConfig1D glc(diagDot_kernel, nCols);
-	JDFTX_LAUNCH(diagDot_kernel, glc.nBlocks,glc.nPerBlock, nRows, nCols, X, Y, out);
+	JDFTX_LAUNCH(diagDot_kernel, glc, nRows, nCols, X, Y, out);
 	gpuErrorCheck();
 }
 
@@ -125,7 +125,7 @@ void relativeHermiticityError_kernel(int N, const complex* data, double* buf)
 double relativeHermiticityError_gpu(int N, const complex* data)
 {	GpuLaunchConfig1D glc(relativeHermiticityError_kernel, N);
 	GpuBuffer buf(2*N);
-	JDFTX_LAUNCH(relativeHermiticityError_kernel, glc.nBlocks,glc.nPerBlock, N, data, buf);
+	JDFTX_LAUNCH(relativeHermiticityError_kernel, glc, N, data, buf);
 	gpuErrorCheck();
 	double errNum = 0., errDen = 0.;
 	cublasDasum(cublasHandle, N, buf, 1, &errNum);
@@ -143,7 +143,7 @@ void zeroLowerTriangular_kernel(int N, complex* data)
 }
 void zeroLowerTriangular_gpu(int N, complex* data)
 {	GpuLaunchConfig1D glc(zeroLowerTriangular_kernel, N);
-	JDFTX_LAUNCH(zeroLowerTriangular_kernel, glc.nBlocks,glc.nPerBlock, N, data);
+	JDFTX_LAUNCH(zeroLowerTriangular_kernel, glc, N, data);
 	gpuErrorCheck();
 }
 
@@ -157,7 +157,7 @@ void zeroUpperTriangular_kernel(int N, complex* data)
 }
 void zeroUpperTriangular_gpu(int N, complex* data)
 {	GpuLaunchConfig1D glc(zeroUpperTriangular_kernel, N);
-	JDFTX_LAUNCH(zeroUpperTriangular_kernel, glc.nBlocks,glc.nPerBlock, N, data);
+	JDFTX_LAUNCH(zeroUpperTriangular_kernel, glc, N, data);
 	gpuErrorCheck();
 }
 

@@ -83,7 +83,7 @@ cusolverStatus_t cusolverDnZpotrf(cusolverDnHandle_t /*handle*/,
                                    int* devInfo) {
     using cplx = std::complex<double>;
     run_lapack_guarded(devInfo, [&]{
-        auto evt = oneapi::mkl::lapack::potrf<cplx>(
+        auto evt = oneapi::mkl::lapack::potrf(
             jdftx_sycl::queue(), cusolver_to_mkl_uplo(uplo),
             static_cast<std::int64_t>(n),
             reinterpret_cast<cplx*>(A), lda,
@@ -105,7 +105,7 @@ cusolverStatus_t cusolverDnZpotrs(cusolverDnHandle_t /*handle*/,
         jdftx_sycl::queue(), cusolver_to_mkl_uplo(uplo), n64, nrhs64, lda, ldb);
     cplx* scratch = sycl::malloc_device<cplx>(sz, jdftx_sycl::queue());
     run_lapack_guarded(devInfo, [&]{
-        auto evt = oneapi::mkl::lapack::potrs<cplx>(
+        auto evt = oneapi::mkl::lapack::potrs(
             jdftx_sycl::queue(), cusolver_to_mkl_uplo(uplo), n64, nrhs64,
             reinterpret_cast<const cplx*>(A), lda,
             reinterpret_cast<cplx*>(B), ldb,
@@ -144,7 +144,7 @@ cusolverStatus_t cusolverDnZgetrf(cusolverDnHandle_t /*handle*/,
         jdftx_sycl::queue(), m64, n64, static_cast<std::int64_t>(lda));
     std::int64_t* ipiv64 = sycl::malloc_device<std::int64_t>(n64, jdftx_sycl::queue());
     run_lapack_guarded(devInfo, [&]{
-        auto evt = oneapi::mkl::lapack::getrf<cplx>(
+        auto evt = oneapi::mkl::lapack::getrf(
             jdftx_sycl::queue(), m64, n64,
             reinterpret_cast<cplx*>(A), lda, ipiv64,
             reinterpret_cast<cplx*>(work), sz, {});
@@ -169,7 +169,7 @@ cusolverStatus_t cusolverDnZgetrs(cusolverDnHandle_t /*handle*/,
         jdftx_sycl::queue(), cusolver_to_mkl_trans(trans), n64, nrhs64, lda, ldb);
     cplx* scratch = sycl::malloc_device<cplx>(sz, jdftx_sycl::queue());
     run_lapack_guarded(devInfo, [&]{
-        auto evt = oneapi::mkl::lapack::getrs<cplx>(
+        auto evt = oneapi::mkl::lapack::getrs(
             jdftx_sycl::queue(), cusolver_to_mkl_trans(trans), n64, nrhs64,
             reinterpret_cast<const cplx*>(A), lda, ipiv64,
             reinterpret_cast<cplx*>(B), ldb,
@@ -206,7 +206,7 @@ cusolverStatus_t cusolverDnZheevd(cusolverDnHandle_t /*handle*/,
                                    int* devInfo) {
     using cplx = std::complex<double>;
     run_lapack_guarded(devInfo, [&]{
-        auto evt = oneapi::mkl::lapack::heevd<cplx>(
+        auto evt = oneapi::mkl::lapack::heevd(
             jdftx_sycl::queue(), cusolver_to_mkl_job(jobz), cusolver_to_mkl_uplo(uplo),
             static_cast<std::int64_t>(n),
             reinterpret_cast<cplx*>(A), lda, W,
@@ -253,7 +253,7 @@ cusolverStatus_t cusolverDnZgesvdj(cusolverDnHandle_t /*handle*/,
     auto jobsvd = (jobz == CUSOLVER_EIG_MODE_VECTOR) ? oneapi::mkl::jobsvd::vectorsina
                                                       : oneapi::mkl::jobsvd::novec;
     run_lapack_guarded(devInfo, [&]{
-        auto evt = oneapi::mkl::lapack::gesvd<cplx>(
+        auto evt = oneapi::mkl::lapack::gesvd(
             jdftx_sycl::queue(), jobsvd, jobsvd,
             static_cast<std::int64_t>(m), static_cast<std::int64_t>(n),
             reinterpret_cast<cplx*>(A), lda, S,

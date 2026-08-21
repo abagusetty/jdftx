@@ -22,10 +22,10 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 #define JDFTX_CORE_GPUKERNELUTILS_H
 
 #include <algorithm>
-#include "gsycl/cuda_runtime.h"
-#include "gsycl/cublas_v2.h"
-#include "gsycl/driver_types.h"
-#include "gsycl/vector_types.h"
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
+#include <driver_types.h>
+#include <vector_types.h>
 #include <core/vector3.h>
 
 //! @addtogroup Utilities
@@ -37,7 +37,7 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 extern cudaDeviceProp cudaDevProps; //!< cached properties of currently running device (defined in GpuUtil.cpp)
 extern cublasHandle_t cublasHandle; //!< global handle to cublas (defined in GpuUtil.cpp)
 #ifdef CUSOLVER_ENABLED
-#include "gsycl/cusolverDn.h"
+#include <cusolverDn.h>
 extern cusolverDnHandle_t cusolverHandle;  //!< global handle to cusolverDn (defined in GpuUtil.cpp)
 #endif
 
@@ -50,6 +50,70 @@ struct GpuLaunchConfig
 	{	cudaFuncGetAttributes(&attr, gpuKernel);
 	}
 };
+
+
+//! @name Kernel launch
+//! JDFTX_LAUNCH() replaces the CUDA `kernel<<<grid,block>>>(args)` syntax, which
+//! has no portable spelling. On CUDA it expands right back to that syntax; on
+//! SYCL it wraps the kernel in a capture-less generic lambda and submits it to
+//! the shim queue (see gsycl/sycl_device.hpp), preserving by-value argument
+//! semantics. Template kernels use the _T forms and pass their template
+//! arguments parenthesised, e.g. JDFTX_LAUNCH_T(f_kernel, (l,m), glc, ...),
+//! so that the commas survive macro expansion.
+//! @{
+#define JDFTX_UNPAREN(...) __VA_ARGS__
+
+//! Declares a kernel parameter of a type whose host-side representation owns
+//! heap memory (RadialFunctionG holds a std::vector), which therefore must not
+//! be copy-constructed on the device. CUDA copies kernel arguments by value;
+//! SYCL binds a reference into the kernel's own argument image, which the
+//! launcher fills with a byte copy -- the same observable effect.
+#ifdef USE_SYCL
+#define JDFTX_KERNEL_ARG(T) const T&
+#else
+#define JDFTX_KERNEL_ARG(T) const T
+#endif
+
+#ifdef USE_SYCL
+
+//The kernel is passed twice: once as a capture-less generic lambda (the device
+//-side call, since SYCL forbids indirect calls) and once as a plain function
+//pointer, from which launchKernel() deduces the parameter types that the
+//arguments must convert to -- reproducing what <<< >>> does implicitly.
+#define JDFTX_LAUNCH(kernel, glc, ...) \
+	jdftx_sycl::launchKernel(#kernel, (glc).nBlocks, (glc).nPerBlock, \
+		[](auto&&... a_){ kernel(static_cast<decltype(a_)>(a_)...); }, &kernel, __VA_ARGS__)
+
+#define JDFTX_LAUNCH_T(kernel, targs, glc, ...) \
+	jdftx_sycl::launchKernel(#kernel, (glc).nBlocks, (glc).nPerBlock, \
+		[](auto&&... a_){ kernel<JDFTX_UNPAREN targs>(static_cast<decltype(a_)>(a_)...); }, \
+		&kernel<JDFTX_UNPAREN targs>, __VA_ARGS__)
+
+#define JDFTX_LAUNCH_SHARED(kernel, glc, sharedBytes, ...) \
+	jdftx_sycl::launchKernelShared(#kernel, (glc).nBlocks, (glc).nPerBlock, sharedBytes, \
+		[](auto&&... a_){ kernel(static_cast<decltype(a_)>(a_)...); }, &kernel, __VA_ARGS__)
+
+#define JDFTX_LAUNCH_T_DIM_SHARED(kernel, targs, nBlocks, nPerBlock, sharedBytes, ...) \
+	jdftx_sycl::launchKernelShared(#kernel, dim3(nBlocks), dim3(nPerBlock), sharedBytes, \
+		[](auto&&... a_){ kernel<JDFTX_UNPAREN targs>(static_cast<decltype(a_)>(a_)...); }, \
+		&kernel<JDFTX_UNPAREN targs>, __VA_ARGS__)
+
+#else //CUDA
+
+#define JDFTX_LAUNCH(kernel, glc, ...) \
+	kernel<<<(glc).nBlocks,(glc).nPerBlock>>>(__VA_ARGS__)
+
+#define JDFTX_LAUNCH_T(kernel, targs, glc, ...) \
+	kernel<JDFTX_UNPAREN targs><<<(glc).nBlocks,(glc).nPerBlock>>>(__VA_ARGS__)
+
+#define JDFTX_LAUNCH_SHARED(kernel, glc, sharedBytes, ...) \
+	kernel<<<(glc).nBlocks,(glc).nPerBlock,sharedBytes>>>(__VA_ARGS__)
+
+#define JDFTX_LAUNCH_T_DIM_SHARED(kernel, targs, nBlocks, nPerBlock, sharedBytes, ...) \
+	kernel<JDFTX_UNPAREN targs><<<nBlocks,nPerBlock,sharedBytes>>>(__VA_ARGS__)
+
+#endif
+//! @}
 
 
 //Get the logical index of the kernel (dir is x, y, or z)

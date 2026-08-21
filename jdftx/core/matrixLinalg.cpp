@@ -23,7 +23,7 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 #if defined(GPU_ENABLED) and defined(CUSOLVER_ENABLED)
 	#define USE_CUSOLVER
 	#define NcutCuSolver 32  //minimum matrix dimension for which to use CuSolver (CPU LAPACK faster for small matrices)
-	#include "gsycl/cusolverDn.h"
+	#include <cusolverDn.h>
 #endif
 
 //Lapack forward declarations

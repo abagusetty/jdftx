@@ -1,7 +1,5 @@
 #pragma once
-// Driver types for JDFTx SYCL port
-// Replaces <driver_types.h> from CUDA toolkit
-// Provides: dim3, launch config types
-
-#include <cstddef>
+// Drop-in replacement for the CUDA toolkit's <driver_types.h> when building
+// with SYCL: cudaError_t, cudaMemcpyKind and cudaDeviceProp live in
+// sycl_device.hpp.
 #include "sycl_device.hpp"

@@ -55,8 +55,22 @@ if(StaticLinking)
 	set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS)
 endif()
 
-#GSL:
-find_package(GSL REQUIRED)
+#Intel GPU support using SYCL (declared early: it selects between the CBLAS/LAPACK
+#packages below and oneMKL, and gates the gsycl/ CUDA-compatibility shim)
+option(USE_SYCL "Enable Intel PVC (SYCL) GPU support" OFF)
+
+#GSL: honor an explicit GSL_PATH (for installs outside the system prefixes), else find it
+if(GSL_PATH)
+	message(STATUS "Using GSL from GSL_PATH: ${GSL_PATH}")
+	find_path(GSL_INCLUDE_DIR gsl/gsl_cblas.h PATHS ${GSL_PATH}/include NO_DEFAULT_PATH)
+	find_library(GSL_LIBRARY NAMES gsl PATHS ${GSL_PATH}/lib ${GSL_PATH}/lib64 NO_DEFAULT_PATH)
+	if((NOT GSL_INCLUDE_DIR) OR (NOT GSL_LIBRARY))
+		message(FATAL_ERROR "GSL not found under GSL_PATH=${GSL_PATH}")
+	endif()
+	set(GSL_FOUND TRUE)
+else()
+	find_package(GSL REQUIRED)
+endif()
 include_directories(${GSL_INCLUDE_DIR})
 
 #Use indepedent CBLAS, LAPACK and FFTW (default) or MKL for all three
@@ -92,9 +106,40 @@ elseif(EnableLibSci)
 	set(CBLAS_LAPACK_FFT_LIBRARIES ${FFTW3_THREADS_LIBRARY} ${FFTW3_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 else()
 	find_package(FFTW3 REQUIRED)
-	find_package(LAPACK_ATLAS REQUIRED)
-	find_package(CBLAS REQUIRED)
-	set(CBLAS_LAPACK_FFT_LIBRARIES ${FFTW3_THREADS_LIBRARY} ${FFTW3_LIBRARY} ${CBLAS_LIBRARY} ${LAPACK_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+	if(USE_SYCL)
+		#oneMKL provides CBLAS and LAPACK for the host side (LP64: JDFTx and GSL
+		#both call them with 32-bit integers). The SYCL device domains
+		#(MKL::MKL_SYCL::BLAS/LAPACK/DFT) are linked onto the GPU library below,
+		#from this same find_package.
+		set(MKL_INTERFACE lp64)
+		find_package(MKL REQUIRED CONFIG PATHS "$ENV{MKLROOT}")
+		#oneMKL's SYCL targets carry -fsycl-allow-device-image-dependencies as an
+		#INTERFACE_LINK_LIBRARIES item, so it always lands after anything we add
+		#and wins. With per-kernel device code split that leaves kernel images
+		#referencing a separate shared image, which the runtime links at launch --
+		#fine for SPIR-V, but AOT native binaries cannot be linked at runtime
+		#(urProgramLinkExp -> UR_RESULT_ERROR_INVALID_ARGUMENT). Flip it in place.
+		foreach(mklTarget MKL::MKL_SYCL MKL::MKL_SYCL::BLAS MKL::MKL_SYCL::LAPACK MKL::MKL_SYCL::DFT)
+			if(TARGET ${mklTarget})
+				get_target_property(mklLinkItems ${mklTarget} INTERFACE_LINK_LIBRARIES)
+				if(mklLinkItems)
+					string(REPLACE "-fsycl-allow-device-image-dependencies"
+						"-fno-sycl-allow-device-image-dependencies" mklLinkItems "${mklLinkItems}")
+					set_target_properties(${mklTarget} PROPERTIES INTERFACE_LINK_LIBRARIES "${mklLinkItems}")
+				endif()
+			endif()
+		endforeach()
+		set(CBLAS_LAPACK_FFT_LIBRARIES ${FFTW3_THREADS_LIBRARY} ${FFTW3_LIBRARY} MKL::MKL ${CMAKE_THREAD_LIBS_INIT})
+		#MKLConfig.cmake leaves LINK_PREFIX="-l" / LINK_SUFFIX behind in this
+		#directory scope; they would otherwise be picked up by the link options
+		#set just below and by add_JDFTx_executable(), emitting a bare "-l".
+		unset(LINK_PREFIX)
+		unset(LINK_SUFFIX)
+	else()
+		find_package(LAPACK_ATLAS REQUIRED)
+		find_package(CBLAS REQUIRED)
+		set(CBLAS_LAPACK_FFT_LIBRARIES ${FFTW3_THREADS_LIBRARY} ${FFTW3_LIBRARY} ${CBLAS_LIBRARY} ${LAPACK_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+	endif()
 endif()
 include_directories(${FFTW3_INCLUDE_DIR})
 
@@ -171,6 +216,37 @@ if(LinkTimeOptimization)
 		endif()
 	endif()
 endif()
+#--- Floating-point model: strict by default.
+# icpx defaults to -fp-model=fast, which permits reassociation and other
+# value-changing transforms, and even -fp-model=precise leaves FMA contraction
+# enabled. Neither default is acceptable here. JDFTx has kernels that rely on
+# exact cancellation -- CoulombSlab_calc's in-plane |G| in
+# core/Coulomb_internal.h computes it as a difference that must come out
+# exactly zero -- and host and device codegen decide contraction
+# independently, so the CPU and GPU builds can disagree for reasons that have
+# nothing to do with the port and are very hard to attribute after the fact.
+# Both are therefore disabled by default, uniformly, for every target.
+#
+# For the record: this was NOT the cause of the graphene Fermi-level error
+# (that was a c2r Nyquist convention mismatch, fixed in gsycl/cufft_impl.cpp).
+# Setting -ffp-contract=off did not move that result by even 1e-9. It is the
+# default because a reproducible floating-point model is worth more than the
+# contraction, not because it is known to have fixed something.
+# Only turn this off (-DPreciseFP=OFF) if you have re-validated the test suite.
+option(PreciseFP "Compile with a strict (non-fast-math) floating-point model" ON)
+if(PreciseFP)
+	# Order matters defensively: Clang documents -fno-fast-math as implying
+	# -ffp-contract=on, so it goes first and the explicit contract setting last.
+	# (icpx 2026.1 keeps -ffp-contract=off either way -- checked with -###.)
+	foreach(fpFlag "-fno-fast-math" "-fp-model=precise" "-ffp-contract=off")
+		string(MAKE_C_IDENTIFIER "HAS${fpFlag}" fpFlagVar)
+		check_cxx_compiler_flag("${fpFlag}" ${fpFlagVar})
+		if(${fpFlagVar})
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${fpFlag}")
+		endif()
+	endforeach()
+endif()
+
 #--- Template recursion depth (more needed in Clang)
 check_cxx_compiler_flag(-ftemplate-depth-512 HAS_TEMPLATE_DEPTH)
 if(HAS_TEMPLATE_DEPTH)
@@ -186,9 +262,14 @@ if(CompileNative)
 		set(JDFTX_CPU_FLAGS "${JDFTX_CPU_FLAGS} -march=native")
 	endif()
 	#--- Intel architecture-dependent optimization
-	check_cxx_compiler_flag(-fast HAS_FAST)
-	if(HAS_FAST)
-		set(JDFTX_CPU_FLAGS "${JDFTX_CPU_FLAGS} -fast")
+	# Deliberately NOT -fast: on the Intel compilers that expands to
+	# -ipo -O3 -static -fp-model=fast=2 -xHost, and the fp-model part would
+	# undo the strict floating-point model set above. Take only the -xHost part.
+	if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
+		check_cxx_compiler_flag(-xHost HAS_XHOST)
+		if(HAS_XHOST)
+			set(JDFTX_CPU_FLAGS "${JDFTX_CPU_FLAGS} -xHost")
+		endif()
 	endif()
 endif()
 
@@ -274,8 +355,11 @@ if(EnableCUDA)
 	endif()
 endif()
 #--------------- Intel GPU support using SYCL (AOT PVC build) ------------------------
-option(USE_SYCL "Enable Intel PVC (SYCL) GPU support" OFF)
+#(the USE_SYCL option itself is declared near the top, before the BLAS/LAPACK search)
 if(USE_SYCL)
+    if(EnableCUDA)
+        message(FATAL_ERROR "EnableCUDA and USE_SYCL are mutually exclusive: gsycl/ shadows the CUDA toolkit headers")
+    endif()
     message(STATUS "Building with SYCL support (USE_SYCL=ON)")
 
     # Honor user-supplied CMAKE_BUILD_TYPE; default to Release.
@@ -312,24 +396,53 @@ if(USE_SYCL)
     # never include any oneMKL C++ header, so mkl_cblas.h never appears
     # alongside gsl/gsl_cblas.h in the same translation unit. The actual
     # oneMKL calls live in gsycl/*_impl.cpp, compiled separately.
+    # Ahead-of-time device codegen for PVC. Turn off (-DSyclAOT=OFF) to fall back
+    # to JIT: much faster to build, which is what you want while iterating.
+    option(SyclAOT "Ahead-of-time compile the SYCL device code for Intel PVC" ON)
+
+    # One device image per kernel: smallest images, so the driver only loads and
+    # (under JIT) compiles what a launch actually needs.
+    #
+    # This must be paired with -fno-sycl-allow-device-image-dependencies at link
+    # (below). With dependencies allowed, a kernel image only *references* the
+    # device functions it calls, leaving them in a separate shared image that
+    # the runtime links in at launch via urProgramLinkExp. That works for SPIR-V
+    # (JIT) but fails with UR_RESULT_ERROR_INVALID_ARGUMENT under AOT, because
+    # native PVC binaries cannot be linked at runtime. Disallowing dependencies
+    # makes every kernel image self-contained, which costs some duplication but
+    # is what AOT requires. oneMKL's imported targets turn the dependencies back
+    # on, hence the explicit negation after them on the link line.
+    set(SyclDeviceCodeSplit "per_kernel" CACHE STRING "-fsycl-device-code-split mode")
+    set_property(CACHE SyclDeviceCodeSplit PROPERTY STRINGS per_kernel per_source off)
+
     set(SYCL_COMPILE_FLAGS
         -fsycl
-        -fsycl-device-code-split=per_kernel
+        -fsycl-device-code-split=${SyclDeviceCodeSplit}
         -fp-model=precise
+        # -fp-model=precise alone does NOT disable FMA contraction; without
+        # this the device pass would contract a-b*c into fma() independently of
+        # the host pass. Stated here as well as in the global PreciseFP block
+        # so device codegen stays pinned even if CMAKE_CXX_FLAGS is overridden.
+        -ffp-contract=off
         -fno-system-debug
         -fsycl-default-sub-group-size=32
-        -fsycl-targets=spir64_gen
-        "SHELL:-Xsycl-target-backend=spir64_gen \"-device pvc\""
     )
-
     set(SYCL_LINK_FLAGS
         -fsycl
-        # -flink-huge-device-code
-        # -fsycl-max-parallel-link-jobs=4
-        -ftarget-register-alloc-mode=pvc:auto
-        -fsycl-targets=spir64_gen
-        "SHELL:-Xsycl-target-backend=spir64_gen \"-device pvc\""
     )
+    if(SyclAOT)
+        list(APPEND SYCL_COMPILE_FLAGS
+            -fsycl-targets=spir64_gen
+            "SHELL:-Xsycl-target-backend=spir64_gen \"-device pvc\""
+        )
+        list(APPEND SYCL_LINK_FLAGS
+            -ftarget-register-alloc-mode=pvc:auto
+            -fsycl-targets=spir64_gen
+            "SHELL:-Xsycl-target-backend=spir64_gen \"-device pvc\""
+        )
+    else()
+        message(STATUS "SYCL build: AOT disabled, device code will be JIT compiled")
+    endif()
 
     # Library with GPU kernels (compiled as C++ via gsycl shim)
     FILE(GLOB jdftxlibSources core/*.cpp fluid/*.cpp electronic/*.cpp perturb/*.cpp commands/*.cpp)
@@ -341,17 +454,21 @@ if(USE_SYCL)
         ${CMAKE_SOURCE_DIR}/gsycl/cusolver_impl.cpp
         ${CMAKE_SOURCE_DIR}/gsycl/cufft_impl.cpp
     )
-    add_library(jdftxlib_gpu_sycl  ${jdftxlibSources} ${gpukernelsSources} ${gsyclImplSources})
+    add_library(jdftxlib_gpu_sycl ${LINK_TYPE} ${jdftxlibSources} ${gpukernelsSources} ${gsyclImplSources})
 
-    # Compile .cu files as C++ (not CUDA) so gsycl headers shadow <cuda_runtime.h>
+    # Compile .cu files as C++ (not CUDA) so gsycl headers shadow <cuda_runtime.h>.
+    # gsycl/cuda_prologue.hpp is force-included into the .cu units only: it plays
+    # nvcc's role of predefining __device__/__global__/__CUDA_ARCH__ so that
+    # core/scalar.h and the __CUDA_ARCH__ splits behave as in the CUDA build.
+    # The .cpp units must NOT get it -- they take the host path, as under nvcc.
     set_source_files_properties(${gpukernelsSources} PROPERTIES LANGUAGE CXX)
-    set_source_files_properties(${gpukernelsSources} PROPERTIES COMPILE_FLAGS "-x c++")
+    set_source_files_properties(${gpukernelsSources} PROPERTIES
+        COMPILE_FLAGS "-x c++ -include ${CMAKE_SOURCE_DIR}/gsycl/cuda_prologue.hpp")
+    target_compile_definitions(jdftxlib_gpu_sycl PRIVATE USE_SYCL)
     target_compile_options(jdftxlib_gpu_sycl PRIVATE ${SYCL_COMPILE_FLAGS})
     target_link_options(jdftxlib_gpu_sycl PRIVATE ${SYCL_LINK_FLAGS})
 
-    # oneMKL discovery and linking (CONFIG mode, NOT -qmkl flag).
-    # Link specific oneMKL SYCL domains instead of full MKL::MKL_SYCL
-    find_package(MKL REQUIRED CONFIG PATHS "$ENV{MKLROOT}")
+    # Link the oneMKL SYCL device domains (found above, in CONFIG mode).
     target_link_libraries(jdftxlib_gpu_sycl
         MKL::MKL_SYCL::BLAS
         MKL::MKL_SYCL::LAPACK
@@ -391,9 +508,21 @@ macro(add_JDFTx_executable execName execSources)
 	endif()
 	set_JDFTX_flags(${execName} OFF)
 	
-	if(EnableCUDA) #GPU version
+	if(EnableCUDA) #NVIDIA GPU version
 		add_executable(${execName}_gpu ${ARGN} ${execSources})
 		target_link_libraries(${execName}_gpu ${LINK_PREFIX} jdftxlib_gpu CUDA::cudart ${LINK_SUFFIX})
+		if(NOT "${ARGN}" MATCHES EXCLUDE_FROM_ALL)
+			install(TARGETS ${execName}_gpu RUNTIME DESTINATION bin)
+		endif()
+		set_JDFTx_flags(${execName}_gpu ON)
+	endif()
+
+	if(USE_SYCL) #Intel GPU version (same _gpu suffix; the two backends are mutually exclusive)
+		add_executable(${execName}_gpu ${ARGN} ${execSources})
+		target_compile_definitions(${execName}_gpu PRIVATE USE_SYCL)
+		target_compile_options(${execName}_gpu PRIVATE ${SYCL_COMPILE_FLAGS})
+		target_link_options(${execName}_gpu PRIVATE ${SYCL_LINK_FLAGS})
+		target_link_libraries(${execName}_gpu ${LINK_PREFIX} jdftxlib_gpu_sycl ${LINK_SUFFIX})
 		if(NOT "${ARGN}" MATCHES EXCLUDE_FROM_ALL)
 			install(TARGETS ${execName}_gpu RUNTIME DESTINATION bin)
 		endif()

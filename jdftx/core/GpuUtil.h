@@ -23,9 +23,9 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef GPU_ENABLED
 
 #include <cstdio>
-#include "gsycl/cuda_runtime.h"
-#include "gsycl/cublas_v2.h"
-#include "gsycl/cufft.h"
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
+#include <cufft.h>
 #include <vector>
 
 //! @addtogroup Utilities
@@ -35,7 +35,7 @@ along with JDFTx.  If not, see <http://www.gnu.org/licenses/>.
 
 extern cublasHandle_t cublasHandle; //!< global handle to cublas (defined in GpuUtil.cpp)
 #ifdef CUSOLVER_ENABLED
-#include "gsycl/cusolverDn.h"
+#include <cusolverDn.h>
 extern cusolverDnHandle_t cusolverHandle;  //!< global handle to cusolverDn (defined in GpuUtil.cpp)
 #endif
 

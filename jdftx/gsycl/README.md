@@ -12,6 +12,48 @@ cmake -DUSE_SYCL=ON    …   # Intel, icpx, via this shim
 The two are mutually exclusive (CMake errors if both are set), because
 `gsycl/` is prepended to the include path and shadows the CUDA toolkit headers.
 
+## Status: PASS
+
+The port passes the JDFTx test suite (`jdftx/test/`, 11 tests / 47 checks) on
+Intel PVC. Validated on Aurora — 6x Data Center GPU Max 1550, oneAPI 2026.1,
+AOT `spir64_gen`, `-DEnableMPI=OFF` — each run from a cleaned test tree
+(`make testclean`; `runTest.sh` skips any run whose `.out` already completed,
+so without that a re-run reports a vacuous pass):
+
+| Configuration | Result |
+| --- | --- |
+| GPU, one tile, `OMP_NUM_THREADS=1` | 11/11 pass, 307 s |
+| GPU, one tile, `OMP_NUM_THREADS=8` | 11/11 pass, 281 s |
+| CPU, `OMP_NUM_THREADS=1`           | 11/11 pass, 554 s |
+| 13 concurrent jobs over 12 tiles (`run_per_tile.sh`) | 13/13, physics matches reference |
+
+Reproduced across two separate Aurora nodes. GPU and CPU agree to 9e-14 on
+graphene's total energy and to 9 digits on its Fermi level.
+
+**What the suite covers**, and therefore what this PASS attests to: plane-wave
+DFT with LDA/GGA functionals, ultrasoft pseudopotentials, Fermi smearing,
+DFT+U, spin-orbit coupling, isolated/slab/periodic Coulomb truncation,
+LinearPCM solvation, ionic and lattice optimization, vibrational modes, and
+checkpoint/restart — single tile, no MPI. That is the production configuration
+this port targets (one system per tile, see `run_per_tile.sh`).
+
+**What it does not cover.** Tracing every kernel launch across the suite
+(`JDFTX_SYCL_TRACE=1`) shows 46 of 97 GPU kernels execute; the rest belong to
+features no test exercises. Untested, in rough order of how likely they are to
+matter: the `phonon` and `wannier` executables (built, never run by the suite);
+the ClassicalDFT/joint-DFT fluid path (`MixedFMT.cu`, `TranslationOperator.cu`,
+`Fex_*.cu` — entirely unexercised); NonlinearPCM and SaLSA; hybrid functionals
+and exact exchange (`exchangeAnalytic_kernel`); meta-GGA; noncollinear spin;
+the numerical Coulomb kernels `multRealKernel`/`multTransformedKernel`; and
+multi-rank MPI, which is not built here at all (and would need
+`ZE_AFFINITY_MASK` set per rank — see the note at the end of this file).
+
+One known open item: results are not bitwise reproducible run to run. Two
+identical GPU runs differ in the 8th significant digit at LCAO iteration 0.
+There is no `atomicAdd` anywhere in the sources, so this is oneMKL's internal
+BLAS/DFT reduction order. At ~1e-8 relative it is far below every test
+tolerance, but it does mean bitwise determinism is not available.
+
 ## How the .cu files reach the shim
 
 `jdftx/CMakeLists.txt`, in the `USE_SYCL` branch:
